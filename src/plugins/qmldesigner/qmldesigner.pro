@@ -6,4 +6,5 @@ SUBDIRS   = \
     qtquickplugin \
     componentsplugin \
     qmlpreviewplugin \
-    assetexporterplugin
+    assetexporterplugin \
+    ozonecgplugin
