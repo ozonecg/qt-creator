@@ -1,4 +1,4 @@
-/* ozonecgplugin.h
+/* o3cmsdataagent.h
  *
  * Copyright (C) 2021 Siddharudh P T <siddharudh@gmail.com>
  *
@@ -20,32 +20,41 @@
 
 #pragma once
 
-#include <iwidgetplugin.h>
+#include <QObject>
+#include <QNetworkAccessManager>
 
 namespace OzoneCG {
 namespace Designer {
 
-class AssetsView;
-class AssetsPreview;
+class CMSUrls
+{
+public:
+    static QUrl listDirUrl(const QString &path);
+    static QUrl previewUrl(const QString &path);
+    static QUrl assetUrl(const QString &path);
+};
 
-class OzoneCGPlugin : public QObject, QmlDesigner::IWidgetPlugin
+class CMSDataAgent : public QObject
 {
     Q_OBJECT
-
-    Q_PLUGIN_METADATA(IID "org.ozonecg.DesignerPlugin" FILE "ozonecgplugin.json")
-
-    Q_DISABLE_COPY(OzoneCGPlugin)
-    Q_INTERFACES(QmlDesigner::IWidgetPlugin)
-
 public:
-    OzoneCGPlugin();
+    CMSDataAgent(QObject *parent = nullptr);
 
-    QString metaInfo() const override;
-    QString pluginName() const override;
+
+    void requestListDir(const QString &path);
+    void requestPreview(const QString &path);
+
+signals:
+    void listDirResponse(const QString &path, const QStringList &items);
+    void previewResponse(const QString &path, const QString &mimeType,
+                         const QByteArray &data);
+
+private slots:
+    void handleNetworkAccessManagerReply(QNetworkReply *);
 
 private:
-    AssetsView *m_assetsView = nullptr;
-    AssetsPreview *m_assetsPreview = nullptr;
+    QNetworkAccessManager m_networkAccessManager;
+
 };
 
 } // namespace Designer

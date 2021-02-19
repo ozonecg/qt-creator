@@ -1,4 +1,4 @@
-/* ozonecgplugin.cpp
+/* o3assetsview.cpp
  *
  * Copyright (C) 2021 Siddharudh P T <siddharudh@gmail.com>
  *
@@ -18,41 +18,41 @@
  * along with OzoneCG.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "ozonecgplugin.h"
-#include "assetsview/o3assetsview.h"
-#include "assetspreview/o3assetspreview.h"
-
-#include <qmldesignerplugin.h>
-#include <designeractionmanager.h>
-#include <modelnodecontextmenu_helper.h>
-#include <viewmanager.h>
+#include "o3assetsview.h"
+#include "o3assetswidget.h"
 
 using namespace QmlDesigner;
 
 namespace OzoneCG {
 namespace Designer {
 
-OzoneCGPlugin::OzoneCGPlugin()
-    : m_assetsView(new AssetsView),
-      m_assetsPreview(new AssetsPreview)
+AssetsView::AssetsView()
 {
-    ViewManager &viewManager = QmlDesignerPlugin::instance()->viewManager();
-    viewManager.registerViewTakingOwnership(m_assetsView);
-    viewManager.registerViewTakingOwnership(m_assetsPreview);
-
-    connect(m_assetsView, &AssetsView::assetSelected,
-            m_assetsPreview, &AssetsPreview::requestPreview);
 }
 
-QString OzoneCGPlugin::metaInfo() const
+bool AssetsView::hasWidget() const
 {
-    return QLatin1String(":/ozonecgplugin/ozonecgplugin.metainfo");
+    return true;
 }
 
-QString OzoneCGPlugin::pluginName() const
+WidgetInfo AssetsView::widgetInfo()
 {
-    return QLatin1String("OzoneCGPlugin");
+    return createWidgetInfo(createWidget(),
+                            nullptr,
+                            QStringLiteral("OzoneCGAssets"),
+                            WidgetInfo::LeftPane,
+                            0,
+                            tr("O3 Assets"));
 }
+
+AssetsWidget *AssetsView::createWidget()
+{
+    if (!m_widget) {
+        m_widget = new AssetsWidget(this);
+    }
+    return m_widget;
+}
+
 
 } // namespace Designer
 } // namespace OzoneCG

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>OzoneCGAssetsWidget</class>
- <widget class="QWidget" name="OzoneCGAssetsWidget">
+ <class>AssetsWidget</class>
+ <widget class="QWidget" name="AssetsWidget">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -15,19 +15,19 @@
   </property>
   <layout class="QGridLayout" name="gridLayout">
    <property name="leftMargin">
-    <number>4</number>
+    <number>2</number>
    </property>
    <property name="topMargin">
-    <number>4</number>
+    <number>2</number>
    </property>
    <property name="rightMargin">
-    <number>4</number>
+    <number>2</number>
    </property>
    <property name="bottomMargin">
-    <number>4</number>
+    <number>2</number>
    </property>
    <property name="spacing">
-    <number>4</number>
+    <number>2</number>
    </property>
    <item row="0" column="0">
     <widget class="QPushButton" name="refreshButton">
@@ -44,7 +44,25 @@
     </widget>
    </item>
    <item row="1" column="0" colspan="2">
-    <widget class="QTreeView" name="assetsTreeView"/>
+    <widget class="QWidget" name="treeViewHostWidget" native="true">
+     <layout class="QVBoxLayout" name="verticalLayout">
+      <property name="spacing">
+       <number>0</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+     </layout>
+    </widget>
    </item>
   </layout>
  </widget>

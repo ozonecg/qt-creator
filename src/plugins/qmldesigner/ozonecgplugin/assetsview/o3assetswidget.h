@@ -1,4 +1,4 @@
-/* ozonecgassetsview.cpp
+/* o3assetswidget.h
  *
  * Copyright (C) 2021 Siddharudh P T <siddharudh@gmail.com>
  *
@@ -18,39 +18,55 @@
  * along with OzoneCG.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "ozonecgassetsview.h"
-#include "ozonecgassetswidget.h"
+#pragma once
+
+#include <QWidget>
+#include <QModelIndex>
+
+namespace Ui {
+class AssetsWidget;
+}
 
 namespace OzoneCG {
 namespace Designer {
 
-OzoneCGAssetsView::OzoneCGAssetsView()
-{
+class AssetsView;
+class AssetsTreeView;
+
+namespace Internal {
+class AssetsWidgetPrivate;
 }
 
-bool OzoneCGAssetsView::hasWidget() const
+class AssetsWidget : public QWidget
 {
-    return true;
-}
+    Q_OBJECT
 
-WidgetInfo OzoneCGAssetsView::widgetInfo()
-{
-    return createWidgetInfo(createWidget(),
-                            nullptr,
-                            QStringLiteral("OzoneCGAssets"),
-                            WidgetInfo::LeftPane,
-                            0,
-                            tr("OzoneCG Assets"));
-}
+public:
+    explicit AssetsWidget(AssetsView *view);
+    ~AssetsWidget();
 
-OzoneCGAssetsWidget *OzoneCGAssetsView::createWidget()
-{
-    if (!m_widget) {
-        m_widget = new OzoneCGAssetsWidget(this);
-    }
-    return m_widget;
-}
+private slots:
+    void refreshAssets(const QString &rootPath, const QStringList &itemPaths);
 
+    void on_refreshButton_clicked();
+
+    void on_filterLineEdit_textChanged(const QString &text);
+
+    void handleCurrentRowChanged(const QModelIndex &index);
+
+protected:
+    void showEvent(QShowEvent *event) override;
+
+
+private:
+    void setupAssetCategories();
+
+    AssetsView *m_assetsView;
+
+    Ui::AssetsWidget *ui;
+    AssetsTreeView *m_assetsTreeView;
+    Internal::AssetsWidgetPrivate *d;
+};
 
 } // namespace Designer
 } // namespace OzoneCG

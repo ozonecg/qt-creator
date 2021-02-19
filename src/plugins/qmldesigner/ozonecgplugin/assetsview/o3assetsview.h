@@ -1,4 +1,4 @@
-/* ozonecgassetswidget.h
+/* o3assetsview.h
  *
  * Copyright (C) 2021 Siddharudh P T <siddharudh@gmail.com>
  *
@@ -20,41 +20,28 @@
 
 #pragma once
 
-#include <QWidget>
-
-namespace Ui {
-class OzoneCGAssetsWidget;
-}
+#include <abstractview.h>
 
 namespace OzoneCG {
 namespace Designer {
 
-class OzoneCGAssetsView;
-class OzoneCGAssetsWidgetData;
+class AssetsWidget;
 
-
-class OzoneCGAssetsWidget : public QWidget
+class AssetsView : public QmlDesigner::AbstractView
 {
     Q_OBJECT
-
 public:
-    explicit OzoneCGAssetsWidget(OzoneCGAssetsView *view);
-    ~OzoneCGAssetsWidget();
+    AssetsView();
 
-private slots:
-    void refreshAssets(const QString &rootPath, const QStringList &itemPaths);
+    bool hasWidget() const override;
+    QmlDesigner::WidgetInfo widgetInfo() override;
 
-    void on_refreshButton_clicked();
-
-    void on_filterLineEdit_textChanged(const QString &arg1);
+signals:
+    void assetSelected(const QString &path);
 
 private:
-    void setupAssetCategories();
-
-    OzoneCGAssetsView *m_assetsView;
-
-    Ui::OzoneCGAssetsWidget *ui;
-    OzoneCGAssetsWidgetData *d;
+    AssetsWidget *createWidget();
+    AssetsWidget *m_widget = nullptr;
 };
 
 } // namespace Designer

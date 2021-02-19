@@ -1,4 +1,4 @@
-/* ozonecgassetsview.h
+/* o3assetspreviewwidget.h
  *
  * Copyright (C) 2021 Siddharudh P T <siddharudh@gmail.com>
  *
@@ -20,27 +20,39 @@
 
 #pragma once
 
-#include <abstractview.h>
+#include <QWidget>
+
+namespace Ui {
+class AssetsPreviewWidget;
+}
 
 namespace OzoneCG {
 namespace Designer {
 
-class OzoneCGAssetsWidget;
+class AssetsPreview;
 
-using namespace QmlDesigner;
+namespace Internal {
+class AssetsPreviewWidgetData;
+}
 
-class OzoneCGAssetsView : public AbstractView
+class AssetsPreviewWidget : public QWidget
 {
     Q_OBJECT
-public:
-    OzoneCGAssetsView();
 
-    bool hasWidget() const override;
-    WidgetInfo widgetInfo() override;
+public:
+    explicit AssetsPreviewWidget(AssetsPreview *preview);
+    ~AssetsPreviewWidget();
+
+public slots:
+    void requestPreview(const QString &path);
+    void showPreview(const QString &path, const QString &mimeType,
+                     const QByteArray &data);
 
 private:
-    OzoneCGAssetsWidget *createWidget();
-    OzoneCGAssetsWidget *m_widget = nullptr;
+    AssetsPreview *m_assetsPreview;
+
+    Ui::AssetsPreviewWidget *ui;
+    Internal::AssetsPreviewWidgetData *d;
 };
 
 } // namespace Designer

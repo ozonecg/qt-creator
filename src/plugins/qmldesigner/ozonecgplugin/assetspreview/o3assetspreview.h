@@ -1,4 +1,4 @@
-/* cmsdataagent.h
+/* o3assetspreview.h
  *
  * Copyright (C) 2021 Siddharudh P T <siddharudh@gmail.com>
  *
@@ -20,29 +20,28 @@
 
 #pragma once
 
-#include <QObject>
-#include <QNetworkAccessManager>
+#include <abstractview.h>
 
 namespace OzoneCG {
 namespace Designer {
 
-class CMSDataAgent : public QObject
+class AssetsPreviewWidget;
+
+class AssetsPreview : public QmlDesigner::AbstractView
 {
     Q_OBJECT
 public:
-    CMSDataAgent(QObject *parent = nullptr);
+    AssetsPreview();
 
-    void requestListDir(const QString &path);
+    bool hasWidget() const override;
+    QmlDesigner::WidgetInfo widgetInfo() override;
 
-signals:
-    void listDirResponse(const QString &path, const QStringList &items);
-
-private slots:
-    void handleNetworkAccessManagerReply(QNetworkReply *);
+public slots:
+    void requestPreview(const QString &path);
 
 private:
-    QNetworkAccessManager m_networkAccessManager;
-
+    AssetsPreviewWidget *createWidget();
+    AssetsPreviewWidget *m_widget = nullptr;
 };
 
 } // namespace Designer
