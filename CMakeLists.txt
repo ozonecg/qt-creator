@@ -22,10 +22,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+qtc_handle_sccache_support()
+
 option(WITH_TESTS "Build Tests" OFF)
 add_feature_info("Build tests" ${WITH_TESTS} "")
 option(WITH_DEBUG_CMAKE "Enabled CMake project debugging functionality (e.g. source file disk checking)" OFF)
-option(BUILD_WITH_PCH "Build with precompiled headers" ON)
 
 # merge binary directories of sub projects into top level
 set(QTC_MERGE_BINARY_DIR ON)
@@ -50,9 +51,20 @@ find_package(Qt5
 )
 if (Qt5_VERSION VERSION_LESS 6.0.0)
   install(TARGETS Qt6Core5Compat EXPORT QtCreator)
+  set(BUILD_WITH_PCH_DEFAULT ON)
+
+  # Specify standards conformance mode to MSVC 2017 and later
+  # Qt6 has the values as part of the Qt6::Platform target interface
+  if (MSVC AND MSVC_VERSION GREATER_EQUAL 1910)
+    add_compile_options(/permissive- /Zc:__cplusplus)
+  endif()
+else()
+  set(BUILD_WITH_PCH_DEFAULT OFF)
 endif()
 find_package(Qt5 COMPONENTS LinguistTools QUIET)
 find_package(Qt5 COMPONENTS Designer DesignerComponents Help SerialPort Svg Tools QUIET)
+
+option(BUILD_WITH_PCH "Build with precompiled headers" ${BUILD_WITH_PCH_DEFAULT})
 
 find_package(Threads)
 find_package(Clang QUIET)
@@ -80,11 +92,6 @@ endfunction()
 
 set_if_target(_has_svg_target Qt5::Svg)
 option(ENABLE_SVG_SUPPORT "Enable SVG support" "${_has_svg_target}")
-
-# specify standards conformance mode to MSVC 2017 and later
-if (MSVC AND MSVC_VERSION GREATER_EQUAL 1910)
-    add_compile_options(/permissive-)
-endif()
 
 add_library(OptionalSvg INTERFACE)
 if (TARGET Qt5::Svg AND ENABLE_SVG_SUPPORT)
@@ -151,6 +158,25 @@ else()
     EXCLUDE_FROM_ALL
   )
 endif()
+
+# install qmake support files
+install(
+  FILES
+    qtcreator.pri
+    qtcreatordata.pri
+    qtcreator_ide_branding.pri
+  DESTINATION ${IDE_HEADER_INSTALL_PATH}
+  COMPONENT Devel EXCLUDE_FROM_ALL
+)
+install(
+  FILES
+    src/qtcreatorlibrary.pri
+    src/qtcreatorplugin.pri
+    src/qtcreatortool.pri
+    src/rpath.pri
+  DESTINATION ${IDE_HEADER_INSTALL_PATH}/src
+  COMPONENT Devel EXCLUDE_FROM_ALL
+)
 
 feature_summary(INCLUDE_QUIET_PACKAGES WHAT
   PACKAGES_FOUND PACKAGES_NOT_FOUND

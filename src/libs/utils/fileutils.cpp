@@ -106,6 +106,14 @@ void CommandLine::addArgs(const QStringList &inArgs, OsType osType)
         addArg(arg, osType);
 }
 
+// Adds cmd's executable and arguments one by one to this commandline.
+// Useful for 'sudo', 'nice', etc
+void CommandLine::addArgs(const CommandLine &cmd, OsType osType)
+{
+    addArg(cmd.executable().toString());
+    addArgs(cmd.splitArguments(osType));
+}
+
 void CommandLine::addArgs(const QString &inArgs, RawType)
 {
     QtcProcess::addArgs(&m_arguments, inArgs);
@@ -113,7 +121,10 @@ void CommandLine::addArgs(const QString &inArgs, RawType)
 
 QString CommandLine::toUserOutput() const
 {
-    return m_executable.toUserOutput() + ' ' + m_arguments;
+    QString res = m_executable.toUserOutput();
+    if (!m_arguments.isEmpty())
+        res += ' ' + m_arguments;
+    return res;
 }
 
 QStringList CommandLine::splitArguments(OsType osType) const
@@ -990,8 +1001,10 @@ QTextStream &operator<<(QTextStream &s, const FilePath &fn)
 }
 
 #ifdef QT_GUI_LIB
-FileUtils::CopyAskingForOverwrite::CopyAskingForOverwrite(QWidget *dialogParent)
+FileUtils::CopyAskingForOverwrite::CopyAskingForOverwrite(
+    QWidget *dialogParent, const std::function<void(QFileInfo)> &postOperation)
     : m_parent(dialogParent)
+    , m_postOperation(postOperation)
 {}
 
 bool FileUtils::CopyAskingForOverwrite::operator()(const QFileInfo &src,
@@ -1036,6 +1049,8 @@ bool FileUtils::CopyAskingForOverwrite::operator()(const QFileInfo &src,
             }
             return false;
         }
+        if (m_postOperation)
+            m_postOperation(dest);
     }
     m_files.append(dest.absoluteFilePath());
     return true;

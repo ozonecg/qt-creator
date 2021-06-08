@@ -353,6 +353,12 @@ static BuildConfiguration *activeBuildConfiguration()
     return target ? target->activeBuildConfiguration() : nullptr;
 }
 
+static RunConfiguration *activeRunConfiguration()
+{
+    const Target * const target = activeTarget();
+    return target ? target->activeRunConfiguration() : nullptr;
+}
+
 static bool isTextFile(const QString &fileName)
 {
     return Utils::mimeTypeForFile(fileName).inherits(
@@ -1833,25 +1839,32 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
                                      return bc->environment().expandedValueForKey(var);
                                  return QString();
                              }, false);
-    expander->registerPrefix("CurrentDocument:Project:BuildConfig:Env",
-                             BuildConfiguration::tr("Variables in the active build environment "
-                                     "of the project containing the currently open document."),
+    const char currentBuildEnvVar[] = "CurrentDocument:Project:BuildConfig:Env";
+    expander->registerPrefix(currentBuildEnvVar,
+                             BuildConfiguration::tr(
+                                 "Variables in the active build environment "
+                                 "of the project containing the currently open document."),
                              [](const QString &var) {
                                  if (BuildConfiguration *bc = currentBuildConfiguration())
                                      return bc->environment().expandedValueForKey(var);
                                  return QString();
                              });
     Utils::EnvironmentProvider::addProvider(
-        {Constants::VAR_CURRENTBUILD_ENV, tr("Current Build Environment"), []() {
+        {currentBuildEnvVar, tr("Current Build Environment"), []() {
              if (BuildConfiguration *bc = currentBuildConfiguration())
                  return bc->environment();
              return Utils::Environment::systemEnvironment();
          }});
     Utils::EnvironmentProvider::addProvider(
-        {"CurrentDocument:Project:BuildConfig:Env", tr("Current Build Environment"), []() {
-             if (BuildConfiguration *bc = currentBuildConfiguration())
-                  return bc->environment();
-              return Utils::Environment::systemEnvironment();
+        {"CurrentDocument:Project:RunConfig:Env", tr("Current Run Environment"), []() {
+             const Project *const project = ProjectTree::currentProject();
+             const Target *const target = project ? project->activeTarget() : nullptr;
+             const RunConfiguration *const rc = target ? target->activeRunConfiguration() : nullptr;
+             if (rc) {
+                 if (auto envAspect = rc->aspect<EnvironmentAspect>())
+                     return envAspect->environment();
+             }
+             return Utils::Environment::systemEnvironment();
          }});
 
     // Global variables for the active project.
@@ -1903,14 +1916,57 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
                  return bc->environment();
              return Utils::Environment::systemEnvironment();
          }});
-    expander->registerPrefix("ActiveProject:BuildConfig:Env",
+    expander->registerPrefix(activeBuildEnvVar,
                              BuildConfiguration::tr("Variables in the active build environment "
-                                     "of the active project."),
+                                                    "of the active project."),
                              [](const QString &var) {
                                  if (BuildConfiguration * const bc = activeBuildConfiguration())
                                      return bc->environment().expandedValueForKey(var);
                                  return QString();
                              });
+
+    expander->registerVariable("ActiveProject:RunConfig:Name",
+        tr("Name of the active project's active run configuration."),
+        []() -> QString {
+            if (const RunConfiguration * const rc = activeRunConfiguration())
+                return rc->displayName();
+            return QString();
+        });
+    expander->registerFileVariables("ActiveProject:RunConfig:Executable",
+        tr("The executable of the active project's active run configuration."),
+        []() -> QString {
+            if (const RunConfiguration * const rc = activeRunConfiguration())
+                return rc->commandLine().executable().toString();
+            return QString();
+        });
+    const char activeRunEnvVar[] = "ActiveProject:RunConfig:Env";
+    Utils::EnvironmentProvider::addProvider(
+        {activeRunEnvVar, tr("Active run environment of the active project."), [] {
+             if (const RunConfiguration *const rc = activeRunConfiguration()) {
+                 if (auto envAspect = rc->aspect<EnvironmentAspect>())
+                     return envAspect->environment();
+             }
+             return Utils::Environment::systemEnvironment();
+         }});
+    expander->registerPrefix(
+        activeRunEnvVar,
+        tr("Variables in the environment of the active project's active run configuration."),
+        [](const QString &var) {
+            if (const RunConfiguration * const rc = activeRunConfiguration()) {
+                if (const auto envAspect = rc->aspect<EnvironmentAspect>())
+                    return envAspect->environment().expandedValueForKey(var);
+            }
+            return QString();
+        });
+    expander->registerVariable("ActiveProject:RunConfig:WorkingDir",
+        tr("The working directory of the active project's active run configuration."),
+        [] {
+            if (const RunConfiguration * const rc = activeRunConfiguration()) {
+                if (const auto wdAspect = rc->aspect<WorkingDirectoryAspect>())
+                    return wdAspect->workingDirectory(rc->macroExpander()).toString();
+            }
+            return QString();
+    });
 
     const auto fileHandler = [] {
         return SessionManager::sessionNameToFileName(SessionManager::activeSession()).toString();
@@ -3545,7 +3601,7 @@ void ProjectExplorerPluginPrivate::addExistingProjects()
         return;
     QStringList failedProjects;
     QStringList addedProjects;
-    for (const QString &filePath : subProjectFilePaths) {
+    for (const QString &filePath : qAsConst(subProjectFilePaths)) {
         if (projectNode->addSubProject(filePath))
             addedProjects << filePath;
         else

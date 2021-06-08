@@ -51,6 +51,18 @@ namespace ProjectExplorer {
 
 namespace Internal { class ToolChainPrivate; }
 
+namespace Deprecated {
+// Deprecated in 4.3:
+namespace Toolchain {
+enum Language {
+    None = 0,
+    C,
+    Cxx
+};
+QString languageId(Language l);
+} // namespace Toolchain
+} // namespace Deprecated
+
 class ToolChainConfigWidget;
 class ToolChainFactory;
 class Kit;
@@ -133,7 +145,7 @@ public:
 
     Utils::Id language() const;
 
-    Utils::FilePath compilerCommand() const;
+    virtual Utils::FilePath compilerCommand() const; // FIXME: De-virtualize.
     void setCompilerCommand(const Utils::FilePath &command);
 
     virtual QList<Utils::OutputLineParser *> createOutputParsers() const = 0;

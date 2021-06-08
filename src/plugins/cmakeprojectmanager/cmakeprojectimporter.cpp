@@ -166,35 +166,36 @@ static FilePath qmakeFromCMakeCache(const CMakeConfig &config)
     if (!cmakeListTxt.open(QIODevice::WriteOnly)) {
         return FilePath();
     }
-    cmakeListTxt.write(QByteArray(R"(
-        cmake_minimum_required(VERSION 3.15)
-
-        project(qmake-probe LANGUAGES NONE)
-
-        # Bypass Qt6's usage of find_dependency, which would require compiler
-        # and source code probing, which slows things unnecessarily
-        file(WRITE "${CMAKE_SOURCE_DIR}/CMakeFindDependencyMacro.cmake"
-        [=[
-            macro(find_dependency dep)
-            endmacro()
-        ]=])
-        set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}")
-
-        find_package(QT NAMES Qt6 Qt5 COMPONENTS Core REQUIRED)
-        find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core REQUIRED)
-
-        if (CMAKE_CROSSCOMPILING)
-            find_program(qmake_binary
-                NAMES qmake qmake.bat
-                PATHS "${Qt${QT_VERSION_MAJOR}_DIR}/../../../bin"
-                NO_DEFAULT_PATH)
-            file(WRITE "${CMAKE_SOURCE_DIR}/qmake-location.txt" "${qmake_binary}")
-        else()
-            file(GENERATE
-                OUTPUT "${CMAKE_SOURCE_DIR}/qmake-location.txt"
-                CONTENT "$<TARGET_PROPERTY:Qt${QT_VERSION_MAJOR}::qmake,IMPORTED_LOCATION>")
-        endif()
-    )"));
+    // FIXME replace by raw string when gcc 8+ is minimum
+    cmakeListTxt.write(QByteArray(
+"cmake_minimum_required(VERSION 3.15)\n"
+"\n"
+"project(qmake-probe LANGUAGES NONE)\n"
+"\n"
+"# Bypass Qt6's usage of find_dependency, which would require compiler\n"
+"# and source code probing, which slows things unnecessarily"
+"file(WRITE \"${CMAKE_SOURCE_DIR}/CMakeFindDependencyMacro.cmake\"\n"
+"[=["
+"    macro(find_dependency dep)\n"
+"    endmacro()\n"
+"]=])\n"
+"set(CMAKE_MODULE_PATH \"${CMAKE_SOURCE_DIR}\")\n"
+"\n"
+"find_package(QT NAMES Qt6 Qt5 COMPONENTS Core REQUIRED)\n"
+"find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core REQUIRED)\n"
+"\n"
+"if (CMAKE_CROSSCOMPILING)\n"
+"    find_program(qmake_binary\n"
+"        NAMES qmake qmake.bat\n"
+"        PATHS \"${Qt${QT_VERSION_MAJOR}_DIR}/../../../bin\"\n"
+"        NO_DEFAULT_PATH)\n"
+"    file(WRITE \"${CMAKE_SOURCE_DIR}/qmake-location.txt\" \"${qmake_binary}\")\n"
+"else()\n"
+"    file(GENERATE\n"
+"         OUTPUT \"${CMAKE_SOURCE_DIR}/qmake-location.txt\"\n"
+"         CONTENT \"$<TARGET_PROPERTY:Qt${QT_VERSION_MAJOR}::qmake,IMPORTED_LOCATION>\")\n"
+"endif()\n"
+));
     cmakeListTxt.close();
 
     SynchronousProcess cmake;
@@ -245,7 +246,7 @@ static FilePath qmakeFromCMakeCache(const CMakeConfig &config)
     if (!qmakeLocationTxt.open(QIODevice::ReadOnly)) {
         return FilePath();
     }
-    FilePath qmakeLocation = FilePath::fromUtf8(qmakeLocationTxt.readLine().data());
+    FilePath qmakeLocation = FilePath::fromUtf8(qmakeLocationTxt.readLine().constData());
     qCDebug(cmInputLog) << "qmake location: " << qmakeLocation.toUserOutput();
 
     return qmakeLocation;
@@ -254,19 +255,50 @@ static FilePath qmakeFromCMakeCache(const CMakeConfig &config)
 static QVector<ToolChainDescription> extractToolChainsFromCache(const CMakeConfig &config)
 {
     QVector<ToolChainDescription> result;
+    bool haveCCxxCompiler = false;
     for (const CMakeConfigItem &i : config) {
         if (!i.key.startsWith("CMAKE_") || !i.key.endsWith("_COMPILER"))
             continue;
         const QByteArray language = i.key.mid(6, i.key.count() - 6 - 9); // skip "CMAKE_" and "_COMPILER"
         Id languageId;
-        if (language == "CXX")
+        if (language == "CXX") {
+            haveCCxxCompiler = true;
             languageId = ProjectExplorer::Constants::CXX_LANGUAGE_ID;
-        else  if (language == "C")
+        }
+        else  if (language == "C") {
+            haveCCxxCompiler = true;
             languageId = ProjectExplorer::Constants::C_LANGUAGE_ID;
+        }
         else
             languageId = Id::fromName(language);
         result.append({FilePath::fromUtf8(i.value), languageId});
     }
+
+    if (!haveCCxxCompiler) {
+        const QByteArray generator = CMakeConfigItem::valueOf(QByteArray("CMAKE_GENERATOR"), config);
+        QString cCompilerName;
+        QString cxxCompilerName;
+        if (generator.contains("Visual Studio")) {
+            cCompilerName = "cl.exe";
+            cxxCompilerName = "cl.exe";
+        } else if (generator.contains("Xcode")) {
+            cCompilerName = "clang";
+            cxxCompilerName = "clang++";
+        }
+
+        if (!cCompilerName.isEmpty() && !cxxCompilerName.isEmpty()) {
+            const FilePath linker = FilePath::fromUtf8(
+                CMakeConfigItem::valueOf(QByteArray("CMAKE_LINKER"), config));
+            if (!linker.isEmpty()) {
+                const FilePath compilerPath = linker.parentDir();
+                result.append({compilerPath.pathAppended(cCompilerName),
+                               ProjectExplorer::Constants::C_LANGUAGE_ID});
+                result.append({compilerPath.pathAppended(cxxCompilerName),
+                               ProjectExplorer::Constants::CXX_LANGUAGE_ID});
+            }
+        }
+    }
+
     return result;
 }
 
@@ -365,8 +397,12 @@ bool CMakeProjectImporter::matchKit(void *directoryData, const Kit *k) const
         if (!Utils::contains(allLanguages, [&tcd](const Id& language) {return language == tcd.language;}))
             continue;
         ToolChain *tc = ToolChainKitAspect::toolChain(k, tcd.language);
-        if (!tc || tc->compilerCommand().canonicalPath() != tcd.compilerPath.canonicalPath())
+        if (!tc
+            || !Utils::Environment::systemEnvironment()
+                    .isSameExecutable(tc->compilerCommand().toString(),
+                                      tcd.compilerPath.toString())) {
             return false;
+        }
     }
 
     qCDebug(cmInputLog) << k->displayName()

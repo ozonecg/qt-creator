@@ -46,28 +46,28 @@
     \endlist
 
     Users select buttons to navigate between the screens.
-    We use \l{Connecting Objects to Signals}{connections} to determine which
+    We use \l{Connecting Components to Signals}{connections} to determine which
     screen to open when users select a particular button and \l{Adding States}
-    {States} to show the screens. We use the \l{Creating Animations}{timeline}
+    {states} to show the screens. We use the \l{Creating Animations}{timeline}
     to create progress indicators for buttons and the \e Running screen.
 
     In addition, all screens contain a small clock component that displays
-    the current time. We implement a \e TimeDate JavaScript component to
+    the current time. We implement a \e TimeDate JavaScript object to
     support this feature on \l{https://doc.qt.io/QtForMCUs/qtul-qmltypes.html}
-    {Qt for MCUs}, which does not support the \l Date QML type at the time of
+    {Qt for MCUs}, which does not support the \l Date component at the time of
     writing.
 
     \section1 Creating an Application for MCUs
 
     We use the \uicontrol {Qt for MCUs Application} project template to create
-    an application for MCUs, which support only a subset of the \l{Qt QML},
-    \l {Qt Quick}, and \l{Qt Quick Controls} types. We select \uicontrol File >
+    an application for MCUs, which support only a subset of the preset
+    \l{glossary-component}{components}. We select \uicontrol File >
     \uicontrol {New File or Project} > \uicontrol {Qt for MCUs Application} >
     \uicontrol Choose, and follow the instructions of the wizard to create our
     project.
 
     This way, only the components and properties supported on MCUs are visible
-    in \uicontrol Library and \uicontrol Properties, and we won't accidentally
+    in \l Library and \l Properties, and we won't accidentally
     add unsupported components to our UI or specify unsupported properties for
     supported components. For more information, see \l{Creating Projects}.
 
@@ -84,10 +84,10 @@
     For this example, we used an external tool to design the UI and then
     exported and imported our design into \QDS as assets and components
     using \QB, as instructed in \l{Exporting from Design Tools}. While
-    exporting, we only picked QML types supported by Qt for MCUs to use
+    exporting, we only picked components supported by Qt for MCUs to use
     for our components. For the button components, we mostly use the
-    \l {basic-image}{Image}, \l Text, and \l {Mouse Area} types. For the
-    screen background, we use the \l {basic-rectangle}{Rectangle} type.
+    \l {basic-image}{Image}, \l Text, and \l {Mouse Area} components. For the
+    screen background, we use the \l {basic-rectangle}{Rectangle} component.
 
     The text might look different on the desktop and MCUs, because on the
     desktop we use dynamic font loading, whereas on MCUs fonts are compiled
@@ -128,7 +128,7 @@
     We animate the rotation properties of the arc segments to rotate each of
     them into the next block, one after another.
 
-    We use this component instead of the \l Arc type, which is not supported
+    We use this component instead of the \l Arc component, which is not supported
     on MCUs.
 
     We can now add a timeline animation to make the arc move around the button
@@ -140,7 +140,7 @@
     \image washingmachineui-timeline-settings.png "Timeline settings"
 
     First, we select the initial arc segment, \e arcSegment1, in
-    \uicontrol Navigator to display its properties in \uicontrol Properties.
+    \l Navigator to display its properties in \uicontrol Properties.
     In the \uicontrol Layout tab, \uicontrol Rotation field, we select
     \inlineimage icons/action-icon.png
     , and then select \uicontrol {Insert Keyframe} to insert a keyframe
@@ -167,7 +167,7 @@
     and 1000 (\e arcSegment4).
 
     When we move the playhead in \uicontrol Timeline, we can see the rotation
-    animation in \uicontrol {Form Editor}.
+    animation in \l {Form Editor}.
 
     \image washingmachineui-multsegmentarc.gif "Rotation animation in Form Editor"
 
@@ -175,7 +175,7 @@
 
     In our UI, we use connections and states to move between screens. First,
     we specify the application workflow in \e ApplicationFlow.qml. When the
-    file is open in \uicontrol {Form Editor}, we drag and drop the components
+    file is open in \uicontrol {Form Editor}, we drag-and-drop the components
     that define the screens in the application from \uicontrol Library to
     \uicontrol Navigator or \uicontrol {Form Editor}: \e StartScreen,
     \e SettingsScreen, \e PresetsScreen, and \e RunningScreen.
@@ -199,12 +199,12 @@
     \section1 Connecting Buttons to State Changes
 
     In each file that defines a screen, we connect signals to the
-    button objects to change to a particular state when users select
+    button components to change to a particular state when users select
     buttons.
 
-    Some signals are predefined for the \l {Mouse Area} type, some we have to
+    Some signals are predefined for the \l {Mouse Area} component, some we have to
     add ourselves. For example, let's look at the start button that we use
-    in \e StartScreen.ui.qml. First, we use the \uicontrol {Text Editor} view
+    in \e StartScreen.ui.qml. First, we use the \l{Text Editor} view
     to create the \c startClicked signal:
 
     \quotefromfile washingMachineUI/StartScreen.ui.qml
@@ -212,12 +212,12 @@
     \printuntil startClicked
 
     Then, we select the mouse area for the start button, \e startMA,
-    in \uicontrol Navigator. In the \uicontrol {Connection View} >
-    \uicontrol Connections tab, we select the \inlineimage plus.png
+    in \uicontrol Navigator. In \l {Connection View} > \uicontrol Connections,
+    we select the \inlineimage plus.png
     (\uicontrol Add) button to connect the \c onClicked() signal handler
     of the button to the \c startClicked() signal.
 
-    \image washingmachineui-connections.png "Connections view"
+    \image washingmachineui-connections.png "Connection View"
 
     Then, in \e ApplicationView.qml, we specify that the \c startClicked()
     signal changes the application state to \e presets:
@@ -231,14 +231,14 @@
     which overrides \c when conditions. Otherwise, we could just select the
     action to change to the state that we want in the \uicontrol Action field.
 
-    We create similar connections between button objects and signals in the
+    We create similar connections between button components and signals in the
     other screens to apply other actions that move users to other screens.
 
-    For more information, see \l {Connecting Objects to Signals}.
+    For more information, see \l {Connecting Components to Signals}.
 
     \section1 Showing the Current Time
 
-    The \l Date QML type is not supported on Qt for MCUs, and the
+    The \l Date component is not supported on Qt for MCUs, and the
     \l{https://doc.qt.io/QtForMCUs/qtul-javascript-environment.html}
     {implementation of the JavaScript \c Date()} object returns elapsed
     time since when the application was started instead of the current

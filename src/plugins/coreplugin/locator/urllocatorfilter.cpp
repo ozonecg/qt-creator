@@ -175,12 +175,6 @@ void UrlLocatorFilter::accept(Core::LocatorFilterEntry selection,
         QDesktopServices::openUrl(url);
 }
 
-void UrlLocatorFilter::refresh(QFutureInterface<void> &future)
-{
-    Q_UNUSED(future)
-    // Nothing to refresh
-}
-
 const char kDisplayNameKey[] = "displayName";
 const char kRemoteUrlsKey[] = "remoteUrls";
 
@@ -234,7 +228,7 @@ bool UrlLocatorFilter::openConfigDialog(QWidget *parent, bool &needsRefresh)
     Q_UNUSED(needsRefresh)
     Internal::UrlFilterOptions optionsDialog(this, parent);
     if (optionsDialog.exec() == QDialog::Accepted) {
-        QMutexLocker lock(&m_mutex); Q_UNUSED(lock)
+        QMutexLocker lock(&m_mutex);
         m_remoteUrls.clear();
         setIncludedByDefault(optionsDialog.m_ui.includeByDefault->isChecked());
         setShortcutString(optionsDialog.m_ui.shortcutEdit->text().trimmed());
@@ -256,7 +250,6 @@ void UrlLocatorFilter::addDefaultUrl(const QString &urlTemplate)
 QStringList UrlLocatorFilter::remoteUrls() const
 {
     QMutexLocker lock(&m_mutex);
-    Q_UNUSED(lock)
     return m_remoteUrls;
 }
 

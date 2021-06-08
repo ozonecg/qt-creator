@@ -412,11 +412,14 @@ ToolChain *McuToolChainPackage::toolChain(Id language) const
 
 QString McuToolChainPackage::toolChainName() const
 {
-    return QLatin1String(m_type == TypeArmGcc
-                         ? "armgcc" : m_type == McuToolChainPackage::TypeIAR
-                           ? "iar" : m_type == McuToolChainPackage::TypeKEIL
-                             ? "keil" : m_type == McuToolChainPackage::TypeGHS
-                               ? "ghs" : "unsupported");
+    switch (m_type) {
+    case TypeArmGcc: return QLatin1String("armgcc");
+    case TypeIAR: return QLatin1String("iar");
+    case TypeKEIL: return QLatin1String("keil");
+    case TypeGHS: return QLatin1String("ghs");
+    case TypeGHSArm: return QLatin1String("ghs-arm");
+    default: return QLatin1String("unsupported");
+    }
 }
 
 QString McuToolChainPackage::cmakeToolChainFileName() const
@@ -600,7 +603,7 @@ void McuSupportOptions::setQulDir(const FilePath &dir)
     qtForMCUsSdkPackage->updateStatus();
     if (qtForMCUsSdkPackage->status() == McuPackage::Status::ValidPackage)
         Sdk::targetsAndPackages(dir, &packages, &mcuTargets);
-    for (auto package : packages)
+    for (auto package : qAsConst(packages))
         connect(package, &McuPackage::changed, this, &McuSupportOptions::changed);
 
     emit changed();
@@ -629,7 +632,8 @@ static void setKitProperties(const QString &kitName, Kit *k, const McuTarget *mc
     k->makeSticky();
     if (mcuTarget->toolChainPackage()->isDesktopToolchain())
         k->setDeviceTypeForIcon(DEVICE_TYPE);
-    QSet<Id> irrelevant = { SysRootKitAspect::id() };
+    k->setValue(QtSupport::SuppliesQtQuickImportPath::id(), true);
+    QSet<Id> irrelevant = { SysRootKitAspect::id(), QtSupport::SuppliesQtQuickImportPath::id() };
     if (!kitNeedsQtVersion())
         irrelevant.insert(QtSupport::QtKitAspect::id());
     k->setIrrelevantAspects(irrelevant);
@@ -639,7 +643,8 @@ static void setKitToolchains(Kit *k, const McuToolChainPackage *tcPackage)
 {
     // No Green Hills toolchain, because support for it is missing.
     if (tcPackage->type() == McuToolChainPackage::TypeUnsupported
-        || tcPackage->type() == McuToolChainPackage::TypeGHS)
+        || tcPackage->type() == McuToolChainPackage::TypeGHS
+        || tcPackage->type() == McuToolChainPackage::TypeGHSArm)
         return;
 
     ToolChainKitAspect::setToolChain(k, tcPackage->toolChain(
@@ -656,6 +661,7 @@ static void setKitDebugger(Kit *k, const McuToolChainPackage *tcPackage)
             // No Green Hills and IAR debugger, because support for it is missing.
             || tcPackage->type() == McuToolChainPackage::TypeUnsupported
             || tcPackage->type() == McuToolChainPackage::TypeGHS
+            || tcPackage->type() == McuToolChainPackage::TypeGHSArm
             || tcPackage->type() == McuToolChainPackage::TypeIAR)
         return;
 
@@ -715,7 +721,8 @@ static void setKitCMakeOptions(Kit *k, const McuTarget* mcuTarget, const QString
 
     CMakeConfig config = CMakeConfigurationKitAspect::configuration(k);
     // CMake ToolChain file for ghs handles CMAKE_*_COMPILER autonomously
-    if (mcuTarget->toolChainPackage()->type() != McuToolChainPackage::TypeGHS) {
+    if (mcuTarget->toolChainPackage()->type() != McuToolChainPackage::TypeGHS &&
+            mcuTarget->toolChainPackage()->type() != McuToolChainPackage::TypeGHSArm) {
         config.append(CMakeConfigItem("CMAKE_CXX_COMPILER", "%{Compiler:Executable:Cxx}"));
         config.append(CMakeConfigItem("CMAKE_C_COMPILER", "%{Compiler:Executable:C}"));
     }
@@ -753,6 +760,15 @@ static void setKitCMakeOptions(Kit *k, const McuTarget* mcuTarget, const QString
     if (kitNeedsQtVersion())
         config.append(CMakeConfigItem("CMAKE_PREFIX_PATH", "%{Qt:QT_INSTALL_PREFIX}"));
     CMakeConfigurationKitAspect::setConfiguration(k, config);
+
+    if (HostOsInfo::isWindowsHost()) {
+        auto type = mcuTarget->toolChainPackage()->type();
+        if (type == McuToolChainPackage::TypeGHS || type == McuToolChainPackage::TypeGHSArm) {
+            // See https://bugreports.qt.io/browse/UL-4247?focusedCommentId=565802&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-565802
+            // and https://bugreports.qt.io/browse/UL-4247?focusedCommentId=565803&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-565803
+            CMakeGeneratorKitAspect::setGenerator(k, "NMake Makefiles JOM");
+        }
+    }
 }
 
 static void setKitQtVersionOptions(Kit *k)
@@ -910,6 +926,30 @@ void McuSupportOptions::createAutomaticKits()
 
     createKits();
     delete qtForMCUsPackage;
+}
+
+/**
+ * @brief Fix/update existing kits if needed
+ */
+void McuSupportOptions::fixExistingKits()
+{
+    for (Kit *kit : KitManager::kits()) {
+        if (!kit->hasValue(Constants::KIT_MCUTARGET_KITVERSION_KEY) )
+            continue;
+
+        // Check if the MCU kits are flagged as supplying a QtQuick import path, in order
+        // to tell the QMLJS code-model that it won't need to add a fall-back import
+        // path.
+        const auto bringsQtQuickImportPath = QtSupport::SuppliesQtQuickImportPath::id();
+        auto irrelevantAspects = kit->irrelevantAspects();
+        if (!irrelevantAspects.contains(bringsQtQuickImportPath)) {
+            irrelevantAspects.insert(bringsQtQuickImportPath);
+            kit->setIrrelevantAspects(irrelevantAspects);
+        }
+        if (!kit->hasValue(bringsQtQuickImportPath)) {
+            kit->setValue(bringsQtQuickImportPath, true);
+        }
+    }
 }
 
 } // Internal

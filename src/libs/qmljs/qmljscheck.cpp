@@ -565,34 +565,12 @@ private:
 class IdsThatShouldNotBeUsedInDesigner  : public QStringList
 {
 public:
-    IdsThatShouldNotBeUsedInDesigner() : QStringList({"top",
-                                                      "bottom",
-                                                      "left",
-                                                      "right",
-                                                      "width",
-                                                      "height",
-                                                      "x",
-                                                      "y",
-                                                      "opacity",
-                                                      "parent",
-                                                      "item",
-                                                      "flow",
-                                                      "color",
-                                                      "margin",
-                                                      "padding",
-                                                      "border",
-                                                      "font",
-                                                      "text",
-                                                      "source",
-                                                      "state",
-                                                      "visible",
-                                                      "focus",
-                                                      "data",
-                                                      "clip",
-                                                      "layer",
-                                                      "scale",
-                                                      "enabled",
-                                                      "anchors"})
+    IdsThatShouldNotBeUsedInDesigner()
+        : QStringList({"top",   "bottom", "left",    "right",   "width",  "height",
+                       "x",     "y",      "opacity", "parent",  "item",   "flow",
+                       "color", "margin", "padding", "print",   "border", "font",
+                       "text",  "source", "state",   "visible", "focus",  "data",
+                       "clip",  "layer",  "scale",   "enabled", "anchors"})
     {}
 };
 
@@ -1388,7 +1366,9 @@ bool Check::visit(Block *ast)
                 && !cast<WhileStatement *>(p)
                 && !cast<IfStatement *>(p)
                 && !cast<SwitchStatement *>(p)
-                && !cast<WithStatement *>(p)) {
+                && !isCaseOrDefault(p)
+                && !cast<WithStatement *>(p)
+                && hasVarStatement(ast)) {
             addMessage(WarnBlock, ast->lbraceToken);
         }
         if (!ast->statements
@@ -1676,6 +1656,33 @@ bool Check::isQtQuick2() const
 bool Check::isQtQuick2Ui() const
 {
     return _doc->language() == Dialect::QmlQtQuick2Ui;
+}
+
+bool Check::isCaseOrDefault(Node *n)
+{
+    if (!cast<StatementList *>(n))
+        return false;
+    if (Node *p = parent(1))
+        return p->kind == Node::Kind_CaseClause || p->kind == Node::Kind_DefaultClause;
+    return false;
+}
+
+bool Check::hasVarStatement(AST::Block *b) const
+{
+    QTC_ASSERT(b, return false);
+    StatementList *s = b->statements;
+    while (s) {
+        if (auto var = cast<VariableStatement *>(s->statement)) {
+            VariableDeclarationList *declList = var->declarations;
+            while (declList) {
+                if (declList->declaration && declList->declaration->scope == VariableScope::Var)
+                    return true;
+                declList = declList->next;
+            }
+        }
+        s = s->next;
+    }
+    return false;
 }
 
 bool Check::visit(NewExpression *ast)

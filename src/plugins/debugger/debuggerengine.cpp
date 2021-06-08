@@ -853,7 +853,7 @@ void DebuggerEnginePrivate::setupViews()
 
     m_perspective->addWindow(m_stackWindow, Perspective::SplitVertical, nullptr);
     m_perspective->addWindow(m_breakWindow, Perspective::SplitHorizontal, m_stackWindow);
-    m_perspective->addWindow(m_threadsWindow, Perspective::AddToTab, m_breakWindow,false);
+    m_perspective->addWindow(m_threadsWindow, Perspective::AddToTab, m_breakWindow);
     m_perspective->addWindow(m_modulesWindow, Perspective::AddToTab, m_threadsWindow, false);
     m_perspective->addWindow(m_sourceFilesWindow, Perspective::AddToTab, m_modulesWindow, false);
     m_perspective->addWindow(m_localsAndInspectorWindow, Perspective::AddToTab, nullptr, true, Qt::RightDockWidgetArea);
@@ -918,6 +918,11 @@ QString DebuggerEngine::stateName(int s)
     }
     return QLatin1String("<unknown>");
 #    undef SN
+}
+
+void DebuggerEngine::notifyExitCode(int code)
+{
+    d->m_runParameters.exitCode = code;
 }
 
 void DebuggerEngine::showStatusMessage(const QString &msg, int timeout) const

@@ -1794,6 +1794,25 @@ TEST_F(TokenProcessor, TemplateSeparateDeclDef)
     ASSERT_THAT(infos[37], IsHighlightingMark(764u, 5u, 9u, HighlightingType::GlobalVariable));
 }
 
+TEST_F(TokenProcessor, NestedTemplate)
+{
+    const auto infos = translationUnit.tokenInfosInRange(sourceRange(773, 44));
+    ASSERT_THAT(infos[12], HasTwoTypes(HighlightingType::Punctuation,
+                                       HighlightingType::DoubleAngleBracketClose));
+}
+
+TEST_F(TokenProcessor, OperatorInTemplate)
+{
+    const auto infos = translationUnit.tokenInfosInRange(sourceRange(787, 28));
+    ASSERT_THAT(infos[9], HasOnlyType(HighlightingType::Punctuation));
+}
+
+TEST_F(TokenProcessor, PreProcessorInStruct)
+{
+    const auto infos = translationUnit.tokenInfosInRange(sourceRange(793, 14));
+    ASSERT_THAT(infos[1], HasOnlyType(HighlightingType::Preprocessor));
+}
+
 Data *TokenProcessor::d;
 
 void TokenProcessor::SetUpTestCase()

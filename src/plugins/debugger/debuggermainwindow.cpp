@@ -573,8 +573,9 @@ void DebuggerMainWindowPrivate::resetCurrentPerspective()
 {
     QTC_ASSERT(m_currentPerspective, return);
     cleanDocks();
-    m_currentPerspective->d->resetPerspective();
     setCentralWidget(m_currentPerspective->d->m_centralWidget);
+    q->showCentralWidget(true);
+    m_currentPerspective->d->resetPerspective();
 }
 
 void DebuggerMainWindowPrivate::setCentralWidget(QWidget *widget)
@@ -967,6 +968,8 @@ void Perspective::rampUpAsCurrent()
     QTC_ASSERT(theMainWindow->d->m_currentPerspective == nullptr, return);
     theMainWindow->d->setCurrentPerspective(this);
     QTC_ASSERT(theMainWindow->d->m_currentPerspective == this, return);
+
+    theMainWindow->showCentralWidget(true);
 
     d->populatePerspective();
 

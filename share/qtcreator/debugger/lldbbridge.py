@@ -807,6 +807,9 @@ class Dumper(DumperBase):
         # Note that specifying a prefix like enum or typedef or class will make the call fail to
         # find the type, thus the prefix is stripped.
         nonPrefixedName = self.canonicalTypeName(self.removeTypePrefix(name))
+        if re.match(r'^.+\(.*\)', nonPrefixedName) is not None:
+            return lldb.SBType()
+
         typeobjlist = self.target.FindTypes(nonPrefixedName)
         if typeobjlist.IsValid():
             for typeobj in typeobjlist:
@@ -841,39 +844,7 @@ class Dumper(DumperBase):
             if typeobj is not None:
                 return typeobj
 
-        return self.lookupNativeTypeInAllModules(name)
-
-    def lookupNativeTypeInAllModules(self, name):
-        needle = self.canonicalTypeName(name)
-        #DumperBase.warn('NEEDLE: %s ' % needle)
-        self.warn('Searching for type %s across all target modules, this could be very slow' % name)
-        for i in range(self.target.GetNumModules()):
-            module = self.target.GetModuleAtIndex(i)
-            # SBModule.GetType is new somewhere after early 300.x
-            # So this may fail.
-            for t in module.GetTypes():
-                n = self.canonicalTypeName(t.GetName())
-                #DumperBase.warn('N: %s' % n)
-                if n == needle:
-                    #DumperBase.warn('FOUND TYPE DIRECT 2: %s ' % t)
-                    self.typeCache[name] = t
-                    return t
-                if n == needle + '*':
-                    res = t.GetPointeeType()
-                    self.typeCache[name] = res
-                    x = self.fromNativeType(res)  # Register under both names
-                    self.registerTypeAlias(x.typeId, name)
-                    #DumperBase.warn('FOUND TYPE BY POINTER: %s ' % res.name)
-                    return res
-                if n == needle + '&':
-                    res = t.GetDereferencedType().GetUnqualifiedType()
-                    self.typeCache[name] = res
-                    x = self.fromNativeType(res)  # Register under both names
-                    self.registerTypeAlias(x.typeId, name)
-                    #DumperBase.warn('FOUND TYPE BY REFERENCE: %s ' % res.name)
-                    return res
-        #DumperBase.warn('NOT FOUND: %s ' % needle)
-        return None
+        return lldb.SBType()
 
     def setupInferior(self, args):
         """ Set up SBTarget instance """
@@ -900,14 +871,6 @@ class Dumper(DumperBase):
                 self.workingDirectory_ = os.getcwd()
             except:  # Could have been deleted in the mean time.
                 pass
-
-        self.ignoreStops = 0
-        if platform.system() == 'Linux':
-            if self.startMode_ == DebuggerStartMode.AttachCore:
-                pass
-            else:
-                if self.useTerminal_:
-                    self.ignoreStops = 1
 
         if self.platform_:
             self.debugger.SetCurrentPlatform(self.platform_)
@@ -1447,9 +1410,6 @@ class Dumper(DumperBase):
                 if self.isInterrupting_:
                     self.isInterrupting_ = False
                     self.reportState("inferiorstopok")
-                elif self.ignoreStops > 0:
-                    self.ignoreStops -= 1
-                    self.process.Continue()
                 else:
                     self.reportState("stopped")
             else:
@@ -2082,10 +2042,6 @@ class SummaryDumper(Dumper, LogMixin):
 
     def report(self, stuff):
         return  # Don't mess up lldb output
-
-    def lookupNativeTypeInAllModules(self, name):
-        self.warn('Failed to resolve type %s' % name)
-        return None
 
     def dump_summary(self, valobj, expanded=False):
         try:

@@ -71,7 +71,7 @@ void CMakeTargetLocatorFilter::prepareSearch(const QString &entry)
 
         const QList<CMakeBuildTarget> buildTargets = bs->buildTargets();
         for (const CMakeBuildTarget &target : buildTargets) {
-            if (target.targetType == UtilityType && !CMakeBuildStep::specialTargets(bs->usesAllCapsTargets()).contains(target.title))
+            if (CMakeBuildSystem::filteredOutTarget(target))
                 continue;
             const int index = target.title.indexOf(entry);
             if (index >= 0) {
@@ -100,11 +100,6 @@ QList<Core::LocatorFilterEntry> CMakeTargetLocatorFilter::matchesFor(QFutureInte
     Q_UNUSED(future)
     Q_UNUSED(entry)
     return m_result;
-}
-
-void CMakeTargetLocatorFilter::refresh(QFutureInterface<void> &future)
-{
-    Q_UNUSED(future)
 }
 
 void CMakeTargetLocatorFilter::projectListUpdated()

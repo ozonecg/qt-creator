@@ -126,6 +126,7 @@ public:
         TypeGHS,
         TypeMSVC,
         TypeGCC,
+        TypeGHSArm,
         TypeUnsupported
     };
 
@@ -208,6 +209,7 @@ public:
     static void removeOutdatedKits();
     static ProjectExplorer::Kit *newKit(const McuTarget *mcuTarget, const McuPackage *qtForMCUsSdk);
     static void createAutomaticKits();
+    static void fixExistingKits();
     void populatePackagesAndTargets();
     static void registerQchFiles();
     static void registerExamples();

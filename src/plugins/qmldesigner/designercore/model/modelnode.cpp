@@ -151,36 +151,14 @@ QString ModelNode::validId()
 
 static bool idIsQmlKeyWord(const QString& id)
 {
-    static const QSet<QString> keywords = {
-        "as",
-        "break",
-        "case",
-        "catch",
-        "continue",
-        "debugger",
-        "default",
-        "delete",
-        "do",
-        "else",
-        "finally",
-        "for",
-        "function",
-        "if",
-        "import",
-        "in",
-        "instanceof",
-        "new",
-        "return",
-        "switch",
-        "this",
-        "throw",
-        "try",
-        "typeof",
-        "var",
-        "void",
-        "while",
-        "with"
-    };
+    static const QSet<QString> keywords = {"as",         "break",    "case",    "catch",
+                                           "continue",   "debugger", "default", "delete",
+                                           "do",         "else",     "finally", "for",
+                                           "function",   "if",       "import",  "in",
+                                           "instanceof", "new",      "print",   "return",
+                                           "switch",     "this",     "throw",   "try",
+                                           "typeof",     "var",      "void",    "while",
+                                           "with"};
 
     return keywords.contains(id);
 }
@@ -225,7 +203,7 @@ static bool isIdToAvoid(const QString& id)
 
 static bool idContainsWrongLetter(const QString& id)
 {
-    static QRegularExpression idExpr(QStringLiteral("^[a-z_][a-zA-Z0-9_]+$"));
+    static QRegularExpression idExpr(QStringLiteral("^[a-z_][a-zA-Z0-9_]*$"));
     return !id.contains(idExpr);
 }
 

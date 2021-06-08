@@ -54,7 +54,8 @@ public:
 
     void importQuick3D(const QStringList &inputFiles, const QString &importPath,
                        const QVector<QJsonObject> &options,
-                       const QHash<QString, int> &extToImportOptionsMap);
+                       const QHash<QString, int> &extToImportOptionsMap,
+                       const QSet<QString> &preselectedFilesForOverwrite);
 
     bool isImporting() const;
     void cancelImport();
@@ -91,22 +92,32 @@ private:
     void notifyFinished();
     void reset();
     void parseFiles(const QStringList &filePaths, const QVector<QJsonObject> &options,
-                    const QHash<QString, int> &extToImportOptionsMap);
-    bool preParseQuick3DAsset(const QString &file, ParseData &pd);
+                    const QHash<QString, int> &extToImportOptionsMap,
+                    const QSet<QString> &preselectedFilesForOverwrite);
+    bool preParseQuick3DAsset(const QString &file, ParseData &pd,
+                              const QSet<QString> &preselectedFilesForOverwrite);
     void postParseQuick3DAsset(const ParseData &pd);
     void copyImportedFiles();
 
     void notifyProgress(int value, const QString &text);
     void notifyProgress(int value);
     void keepUiAlive() const;
-    bool confirmAssetOverwrite(const QString &assetName);
+
+    enum class OverwriteResult {
+        Skip,
+        Overwrite,
+        Update
+    };
+
+    OverwriteResult confirmAssetOverwrite(const QString &assetName);
     bool startImportProcess(const ParseData &pd);
     bool startIconProcess(int size, const QString &iconFile, const QString &iconSource);
     void postImport();
     void finalizeQuick3DImport();
+    QString sourceSceneTargetFilePath(const ParseData &pd);
 
     QSet<QHash<QString, QString>> m_importFiles;
-    QSet<QString> m_overwrittenImports;
+    QHash<QString, QStringList> m_overwrittenImports;
     bool m_isImporting = false;
     bool m_cancelled = false;
     QString m_importPath;

@@ -432,6 +432,8 @@ QWidget *FakeVimOptionPage::widget()
         m_group.insert(theFakeVimSetting(ConfigEmulateVimCommentary), m_ui.checkBoxVimCommentary);
         m_group.insert(theFakeVimSetting(ConfigEmulateReplaceWithRegister), m_ui.checkBoxReplaceWithRegister);
         m_group.insert(theFakeVimSetting(ConfigEmulateExchange), m_ui.checkBoxExchange);
+        m_group.insert(theFakeVimSetting(ConfigEmulateArgTextObj), m_ui.checkBoxArgTextObj);
+        m_group.insert(theFakeVimSetting(ConfigEmulateSurround), m_ui.checkBoxVimSurround);
 
         connect(m_ui.pushButtonCopyTextEditorSettings, &QAbstractButton::clicked,
                 this, &FakeVimOptionPage::copyTextEditorSettings);
@@ -1556,7 +1558,7 @@ void FakeVimPluginPrivate::editorOpened(IEditor *editor)
         return;
 
     // Duplicated editors are not signalled by the EditorManager. Track them nevertheless.
-    connect(editor, &IEditor::editorDuplicated, this, [this, editor](IEditor *duplicate) {
+    connect(editor, &IEditor::editorDuplicated, this, [this](IEditor *duplicate) {
         editorOpened(duplicate);
         connect(duplicate, &QObject::destroyed, this, [this, duplicate] {
             m_editorToHandler.remove(duplicate);

@@ -54,14 +54,21 @@ class BaseAspectPrivate
 {
 public:
     Utils::Id m_id;
+    QVariant m_value;
+    QVariant m_defaultValue;
+
     QString m_displayName;
     QString m_settingsKey; // Name of data in settings.
     QString m_tooltip;
+    QString m_labelText;
+    QPixmap m_labelPixmap;
+    QPointer<QLabel> m_label; // Owned by configuration widget
+
     bool m_visible = true;
     bool m_enabled = true;
     bool m_readOnly = true;
     BaseAspect::ConfigWidgetCreator m_configWidgetCreator;
-    QList<QWidget *> m_subWidgets;
+    QList<QPointer<QWidget>> m_subWidgets;
 };
 
 } // Internal
@@ -107,6 +114,50 @@ void BaseAspect::setId(Id id)
     d->m_id = id;
 }
 
+QVariant BaseAspect::value() const
+{
+    return d->m_value;
+}
+
+/*!
+    Sets value.
+
+    Emits changed() if the value changed.
+*/
+void BaseAspect::setValue(const QVariant &value)
+{
+    if (setValueQuietly(value))
+        emit changed();
+}
+
+/*!
+    Sets value without emitting changed()
+
+    Returns whether the value changed.
+*/
+bool BaseAspect::setValueQuietly(const QVariant &value)
+{
+    if (d->m_value == value)
+        return false;
+    d->m_value = value;
+    return true;
+}
+
+QVariant BaseAspect::defaultValue() const
+{
+    return d->m_defaultValue;
+}
+
+/*!
+    Sets a default value for this aspect.
+
+    Default values will not be stored in settings.
+*/
+void BaseAspect::setDefaultValue(const QVariant &value)
+{
+    d->m_defaultValue = value;
+}
+
 void BaseAspect::setDisplayName(const QString &displayName)
 {
     d->m_displayName = displayName;
@@ -125,8 +176,56 @@ bool BaseAspect::isVisible() const
 void BaseAspect::setVisible(bool visible)
 {
     d->m_visible = visible;
-    for (QWidget *w : qAsConst(d->m_subWidgets))
+    for (QWidget *w : qAsConst(d->m_subWidgets)) {
+        QTC_ASSERT(w, continue);
         w->setVisible(visible);
+    }
+}
+
+void BaseAspect::setupLabel()
+{
+    QTC_ASSERT(!d->m_label, delete d->m_label);
+    d->m_label = new QLabel(d->m_labelText);
+    d->m_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    if (!d->m_labelPixmap.isNull())
+        d->m_label->setPixmap(d->m_labelPixmap);
+    registerSubWidget(d->m_label);
+}
+
+/*!
+    Sets \a labelText as text for the separate label in the visual
+    representation of this aspect.
+*/
+void BaseAspect::setLabelText(const QString &labelText)
+{
+    d->m_labelText = labelText;
+    if (d->m_label)
+        d->m_label->setText(labelText);
+}
+
+/*!
+    Sets \a labelPixmap as pixmap for the separate label in the visual
+    representation of this aspect.
+*/
+void BaseAspect::setLabelPixmap(const QPixmap &labelPixmap)
+{
+    d->m_labelPixmap = labelPixmap;
+    if (d->m_label)
+        d->m_label->setPixmap(labelPixmap);
+}
+
+/*!
+    Returns the current text for the separate label in the visual
+    representation of this aspect.
+*/
+QString BaseAspect::labelText() const
+{
+    return d->m_labelText;
+}
+
+QLabel *BaseAspect::label() const
+{
+    return d->m_label.data();
 }
 
 QString BaseAspect::toolTip() const
@@ -140,21 +239,26 @@ QString BaseAspect::toolTip() const
 void BaseAspect::setToolTip(const QString &tooltip)
 {
     d->m_tooltip = tooltip;
-    for (QWidget *w : qAsConst(d->m_subWidgets))
+    for (QWidget *w : qAsConst(d->m_subWidgets)) {
+        QTC_ASSERT(w, continue);
         w->setToolTip(tooltip);
+    }
 }
 
 void BaseAspect::setEnabled(bool enabled)
 {
     d->m_enabled = enabled;
-    for (QWidget *w : qAsConst(d->m_subWidgets))
+    for (QWidget *w : qAsConst(d->m_subWidgets)) {
+        QTC_ASSERT(w, continue);
         w->setEnabled(enabled);
+    }
 }
 
 void BaseAspect::setReadOnly(bool readOnly)
 {
     d->m_readOnly = readOnly;
     for (QWidget *w : qAsConst(d->m_subWidgets)) {
+        QTC_ASSERT(w, continue);
         if (auto lineEdit = qobject_cast<QLineEdit *>(w))
             lineEdit->setReadOnly(readOnly);
         else if (auto textEdit = qobject_cast<QTextEdit *>(w))
@@ -222,6 +326,10 @@ void BaseAspect::registerSubWidget(QWidget *widget)
 {
     d->m_subWidgets.append(widget);
 
+    connect(widget, &QObject::destroyed, this, [this, widget] {
+        d->m_subWidgets.removeAll(widget);
+    });
+
     widget->setEnabled(d->m_enabled);
     widget->setToolTip(d->m_tooltip);
 
@@ -245,19 +353,19 @@ void BaseAspect::saveToMap(QVariantMap &data, const QVariant &value,
 
 /*!
     Retrieves the internal value of this BaseAspect from a \c QVariantMap.
-
-    This base implementation does nothing.
 */
-void BaseAspect::fromMap(const QVariantMap &)
-{}
+void BaseAspect::fromMap(const QVariantMap &map)
+{
+    setValue(map.value(settingsKey(), defaultValue()));
+}
 
 /*!
     Stores the internal value of this BaseAspect into a \c QVariantMap.
-
-    This base implementation does nothing.
 */
-void BaseAspect::toMap(QVariantMap &) const
-{}
+void BaseAspect::toMap(QVariantMap &map) const
+{
+    saveToMap(map, d->m_value, d->m_defaultValue);
+}
 
 /*!
     \internal
@@ -323,18 +431,12 @@ class BoolAspectPrivate
 {
 public:
     BoolAspect::LabelPlacement m_labelPlacement = BoolAspect::LabelPlacement::AtCheckBox;
-    bool m_value = false;
-    bool m_defaultValue = false;
-    QString m_labelText;
     QPointer<QCheckBox> m_checkBox; // Owned by configuration widget
-    QPointer<QLabel> m_label; // Owned by configuration widget
 };
 
 class SelectionAspectPrivate
 {
 public:
-    int m_value = 0;
-    int m_defaultValue = 0;
     SelectionAspect::DisplayStyle m_displayStyle
             = SelectionAspect::DisplayStyle::RadioButtons;
     struct Option { QString displayName; QString tooltip; };
@@ -343,25 +445,23 @@ public:
     // These are all owned by the configuration widget.
     QList<QPointer<QRadioButton>> m_buttons;
     QPointer<QComboBox> m_comboBox;
-    QPointer<QLabel> m_label;
     QPointer<QButtonGroup> m_buttonGroup;
 };
 
 class MultiSelectionAspectPrivate
 {
 public:
-    QStringList m_value;
+    explicit MultiSelectionAspectPrivate(MultiSelectionAspect *q) : q(q) {}
+
+    bool setValueSelectedHelper(const QString &value, bool on);
+
+    MultiSelectionAspect *q;
     QStringList m_allValues;
     MultiSelectionAspect::DisplayStyle m_displayStyle
         = MultiSelectionAspect::DisplayStyle::ListView;
-    QString m_labelText;
 
     // These are all owned by the configuration widget.
     QPointer<QListWidget> m_listView;
-    QPointer<QLabel> m_label;
-
-    void updateListView();
-    bool setValueSelectedHelper(const QString &value, bool on);
 };
 
 class StringAspectPrivate
@@ -372,22 +472,18 @@ public:
         = StringAspect::CheckBoxPlacement::Right;
     StringAspect::UncheckedSemantics m_uncheckedSemantics
         = StringAspect::UncheckedSemantics::Disabled;
-    QString m_labelText;
     std::function<QString(const QString &)> m_displayFilter;
     std::unique_ptr<BoolAspect> m_checker;
 
-    QString m_value;
     QString m_placeHolderText;
     QString m_historyCompleterKey;
     PathChooser::Kind m_expectedKind = PathChooser::File;
     Environment m_environment;
-    QPointer<QLabel> m_label;
     QPointer<QLabel> m_labelDisplay;
     QPointer<FancyLineEdit> m_lineEditDisplay;
     QPointer<PathChooser> m_pathChooserDisplay;
     QPointer<QTextEdit> m_textEditDisplay;
     MacroExpanderProvider m_expanderProvider;
-    QPixmap m_labelPixmap;
     FilePath m_baseFileName;
     StringAspect::ValueAcceptor m_valueAcceptor;
     FancyLineEdit::ValidationFunction m_validator;
@@ -410,23 +506,18 @@ public:
 class IntegerAspectPrivate
 {
 public:
-    qint64 m_value = 0;
-    qint64 m_defaultValue = 0;
     QVariant m_minimumValue;
     QVariant m_maximumValue;
     int m_displayIntegerBase = 10;
     qint64 m_displayScaleFactor = 1;
-    QString m_labelText;
     QString m_prefix;
     QString m_suffix;
-    QPointer<QLabel> m_label;
     QPointer<QSpinBox> m_spinBox; // Owned by configuration widget
 };
 
 class StringListAspectPrivate
 {
 public:
-    QStringList m_value;
 };
 
 class AspectContainerPrivate
@@ -515,21 +606,21 @@ void StringAspect::setValueAcceptor(StringAspect::ValueAcceptor &&acceptor)
 */
 QString StringAspect::value() const
 {
-    return d->m_value;
+    return BaseAspect::value().toString();
 }
 
 /*!
     Sets the \a value of this StringAspect from an ordinary \c QString.
 */
-void StringAspect::setValue(const QString &value)
+void StringAspect::setValue(const QString &val)
 {
-    const bool isSame = value == d->m_value;
+    const bool isSame = val == value();
     if (isSame)
         return;
 
-    QString processedValue = value;
+    QString processedValue = val;
     if (d->m_valueAcceptor) {
-        const Utils::optional<QString> tmp = d->m_valueAcceptor(d->m_value, value);
+        const Utils::optional<QString> tmp = d->m_valueAcceptor(value(), val);
         if (!tmp) {
             update(); // Make sure the original value is retained in the UI
             return;
@@ -537,9 +628,10 @@ void StringAspect::setValue(const QString &value)
         processedValue = tmp.value();
     }
 
-    d->m_value = processedValue;
-    update();
-    emit changed();
+    if (BaseAspect::setValueQuietly(QVariant(processedValue))) {
+        update();
+        emit changed();
+    }
 }
 
 /*!
@@ -548,7 +640,7 @@ void StringAspect::setValue(const QString &value)
 void StringAspect::fromMap(const QVariantMap &map)
 {
     if (!settingsKey().isEmpty())
-        d->m_value = map.value(settingsKey()).toString();
+        BaseAspect::setValueQuietly(map.value(settingsKey(), defaultValue()));
     if (d->m_checker)
         d->m_checker->fromMap(map);
 }
@@ -558,7 +650,7 @@ void StringAspect::fromMap(const QVariantMap &map)
 */
 void StringAspect::toMap(QVariantMap &map) const
 {
-    saveToMap(map, d->m_value, QString());
+    saveToMap(map, value(), QString());
     if (d->m_checker)
         d->m_checker->toMap(map);
 }
@@ -572,7 +664,7 @@ void StringAspect::toMap(QVariantMap &map) const
 */
 FilePath StringAspect::filePath() const
 {
-    return FilePath::fromUserInput(d->m_value);
+    return FilePath::fromUserInput(value());
 }
 
 /*!
@@ -588,43 +680,12 @@ void StringAspect::setFilePath(const FilePath &value)
 }
 
 /*!
-    Sets \a labelText as text for the separate label in the visual
-    representation of this string aspect.
-*/
-void StringAspect::setLabelText(const QString &labelText)
-{
-    d->m_labelText = labelText;
-    if (d->m_label)
-        d->m_label->setText(labelText);
-}
-
-/*!
-    Sets \a labelPixmap as pixmap for the separate label in the visual
-    representation of this aspect.
-*/
-void StringAspect::setLabelPixmap(const QPixmap &labelPixmap)
-{
-    d->m_labelPixmap = labelPixmap;
-    if (d->m_label)
-        d->m_label->setPixmap(labelPixmap);
-}
-
-/*!
     \internal
 */
 void StringAspect::setShowToolTipOnLabel(bool show)
 {
     d->m_showToolTipOnLabel = show;
     update();
-}
-
-/*!
-    Returns the current text for the separate label in the visual
-    representation of this string aspect.
-*/
-QString StringAspect::labelText() const
-{
-    return d->m_labelText;
 }
 
 /*!
@@ -771,18 +832,13 @@ void StringAspect::setUncheckedSemantics(StringAspect::UncheckedSemantics semant
 
 void StringAspect::addToLayout(LayoutBuilder &builder)
 {
-    QTC_CHECK(!d->m_label);
-
     if (d->m_checker && d->m_checkBoxPlacement == CheckBoxPlacement::Top) {
         d->m_checker->addToLayout(builder);
         builder.finishRow();
     }
 
-    d->m_label = createSubWidget<QLabel>(d->m_labelText);
-    d->m_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    if (!d->m_labelPixmap.isNull())
-        d->m_label->setPixmap(d->m_labelPixmap);
-    builder.addItem(d->m_label.data());
+    setupLabel();
+    builder.addItem(label());
 
     const auto useMacroExpander = [this, &builder](QWidget *w) {
         if (!d->m_expanderProvider)
@@ -828,10 +884,7 @@ void StringAspect::addToLayout(LayoutBuilder &builder)
         useMacroExpander(d->m_textEditDisplay);
         connect(d->m_textEditDisplay, &QTextEdit::textChanged, this, [this] {
             const QString value = d->m_textEditDisplay->document()->toPlainText();
-            if (value != d->m_value) {
-                d->m_value = value;
-                emit changed();
-            }
+            setValue(value);
         });
         builder.addItem(d->m_textEditDisplay.data());
         break;
@@ -852,8 +905,7 @@ void StringAspect::addToLayout(LayoutBuilder &builder)
 
 void StringAspect::update()
 {
-    const QString displayedString = d->m_displayFilter ? d->m_displayFilter(d->m_value)
-                                                       : d->m_value;
+    const QString displayedString = d->m_displayFilter ? d->m_displayFilter(value()) : value();
 
     if (d->m_pathChooserDisplay) {
         d->m_pathChooserDisplay->setFilePath(FilePath::fromString(displayedString));
@@ -866,19 +918,15 @@ void StringAspect::update()
     }
 
     if (d->m_textEditDisplay) {
-        d->m_textEditDisplay->setText(displayedString);
+        const QString old = d->m_textEditDisplay->document()->toPlainText();
+        if (displayedString != old)
+            d->m_textEditDisplay->setText(displayedString);
         d->updateWidgetFromCheckStatus(d->m_textEditDisplay.data());
     }
 
     if (d->m_labelDisplay) {
         d->m_labelDisplay->setText(displayedString);
         d->m_labelDisplay->setToolTip(d->m_showToolTipOnLabel ? displayedString : toolTip());
-    }
-
-    if (d->m_label) {
-        d->m_label->setText(d->m_labelText);
-        if (!d->m_labelPixmap.isNull())
-            d->m_label->setPixmap(d->m_labelPixmap);
     }
 
     validateInput();
@@ -927,6 +975,8 @@ void StringAspect::makeCheckable(CheckBoxPlacement checkBoxPlacement,
 BoolAspect::BoolAspect(const QString &settingsKey)
     : d(new Internal::BoolAspectPrivate)
 {
+    setValue(false);
+    setDefaultValue(false);
     setSettingsKey(settingsKey);
 }
 
@@ -944,70 +994,45 @@ void BoolAspect::addToLayout(LayoutBuilder &builder)
     d->m_checkBox = createSubWidget<QCheckBox>();
     switch (d->m_labelPlacement) {
     case LabelPlacement::AtCheckBoxWithoutDummyLabel:
-        d->m_checkBox->setText(d->m_labelText);
+        d->m_checkBox->setText(labelText());
         break;
     case LabelPlacement::AtCheckBox:
-        d->m_checkBox->setText(d->m_labelText);
+        d->m_checkBox->setText(labelText());
         builder.addItem(createSubWidget<QLabel>());
         break;
     case LabelPlacement::InExtraLabel:
-        d->m_label = createSubWidget<QLabel>(d->m_labelText);
-        builder.addItem(d->m_label.data());
+        setupLabel();
+        builder.addItem(label());
         break;
     }
-    d->m_checkBox->setChecked(d->m_value);
+    d->m_checkBox->setChecked(value());
     builder.addItem(d->m_checkBox.data());
     connect(d->m_checkBox.data(), &QAbstractButton::clicked, this, [this] {
-        d->m_value = d->m_checkBox->isChecked();
-        emit changed();
+        setValue(d->m_checkBox->isChecked());
     });
 }
 
 /*!
     \reimp
 */
-void BoolAspect::fromMap(const QVariantMap &map)
-{
-    d->m_value = map.value(settingsKey(), d->m_defaultValue).toBool();
-}
-
-/*!
-    \reimp
-*/
-void BoolAspect::toMap(QVariantMap &data) const
-{
-    saveToMap(data, d->m_value, d->m_defaultValue);
-}
-
-bool BoolAspect::defaultValue() const
-{
-    return d->m_defaultValue;
-}
-
-void BoolAspect::setDefaultValue(bool defaultValue)
-{
-    d->m_defaultValue = defaultValue;
-    d->m_value = defaultValue;
-}
 
 bool BoolAspect::value() const
 {
-    return d->m_value;
+    return BaseAspect::value().toBool();
 }
 
 void BoolAspect::setValue(bool value)
 {
-    if (d->m_value == value)
-        return;
-    d->m_value = value;
-    if (d->m_checkBox)
-        d->m_checkBox->setChecked(d->m_value);
-    emit changed();
+    if (BaseAspect::setValueQuietly(value)) {
+        if (d->m_checkBox)
+            d->m_checkBox->setChecked(value);
+        emit changed();
+    }
 }
 
 void BoolAspect::setLabel(const QString &labelText, LabelPlacement labelPlacement)
 {
-    d->m_labelText = labelText;
+    BaseAspect::setLabelText(labelText);
     d->m_labelPlacement = labelPlacement;
 }
 
@@ -1047,71 +1072,38 @@ void SelectionAspect::addToLayout(LayoutBuilder &builder)
         for (int i = 0, n = d->m_options.size(); i < n; ++i) {
             const Internal::SelectionAspectPrivate::Option &option = d->m_options.at(i);
             auto button = new QRadioButton(option.displayName);
-            button->setChecked(i == d->m_value);
+            button->setChecked(i == value());
             button->setToolTip(option.tooltip);
             builder.addItems({{}, button});
             d->m_buttons.append(button);
             d->m_buttonGroup->addButton(button);
             connect(button, &QAbstractButton::clicked, this, [this, i] {
-                if (d->m_value != i) {
-                    d->m_value = i;
-                    emit changed();
-                }
+                setValue(i);
             });
         }
         break;
     case DisplayStyle::ComboBox:
-        d->m_label = createSubWidget<QLabel>(displayName());
+        setupLabel();
+        setLabelText(displayName());
         d->m_comboBox = createSubWidget<QComboBox>();
         for (int i = 0, n = d->m_options.size(); i < n; ++i)
             d->m_comboBox->addItem(d->m_options.at(i).displayName);
-        connect(d->m_comboBox.data(), QOverload<int>::of(&QComboBox::activated), this,
-                [this](int index) {
-            if (d->m_value != index) {
-                d->m_value = index;
-                emit changed();
-            }
-        });
-        d->m_comboBox->setCurrentIndex(d->m_value);
-        builder.addItems({d->m_label.data(), d->m_comboBox.data()});
+        connect(d->m_comboBox.data(), QOverload<int>::of(&QComboBox::activated),
+                this, &SelectionAspect::setValue);
+        d->m_comboBox->setCurrentIndex(value());
+        builder.addItems({label(), d->m_comboBox.data()});
         break;
     }
 }
 
-/*!
-    \reimp
-*/
-void SelectionAspect::fromMap(const QVariantMap &map)
-{
-    d->m_value = map.value(settingsKey(), d->m_defaultValue).toInt();
-}
-
-/*!
-    \reimp
-*/
-void SelectionAspect::toMap(QVariantMap &data) const
-{
-    saveToMap(data, d->m_value, d->m_defaultValue);
-}
-
 void SelectionAspect::setVisibleDynamic(bool visible)
 {
-    if (d->m_label)
-        d->m_label->setVisible(visible);
+    if (QLabel *l = label())
+        l->setVisible(visible);
     if (d->m_comboBox)
         d->m_comboBox->setVisible(visible);
     for (QRadioButton * const button : qAsConst(d->m_buttons))
         button->setVisible(visible);
-}
-
-int SelectionAspect::defaultValue() const
-{
-    return d->m_defaultValue;
-}
-
-void SelectionAspect::setDefaultValue(int defaultValue)
-{
-    d->m_defaultValue = defaultValue;
 }
 
 void SelectionAspect::setDisplayStyle(SelectionAspect::DisplayStyle style)
@@ -1121,22 +1113,23 @@ void SelectionAspect::setDisplayStyle(SelectionAspect::DisplayStyle style)
 
 int SelectionAspect::value() const
 {
-    return d->m_value;
+    return BaseAspect::value().toInt();
 }
 
 void SelectionAspect::setValue(int value)
 {
-    d->m_value = value;
-    if (d->m_buttonGroup && 0 <= value && value < d->m_buttons.size())
-        d->m_buttons.at(value)->setChecked(true);
-    else if (d->m_comboBox) {
-        d->m_comboBox->setCurrentIndex(value);
+    if (BaseAspect::setValueQuietly(value)) {
+        if (d->m_buttonGroup && 0 <= value && value < d->m_buttons.size())
+            d->m_buttons.at(value)->setChecked(true);
+        else if (d->m_comboBox)
+            d->m_comboBox->setCurrentIndex(value);
+        emit changed();
     }
 }
 
 QString SelectionAspect::stringValue() const
 {
-    return d->m_options.at(d->m_value).displayName;
+    return d->m_options.at(value()).displayName;
 }
 
 void SelectionAspect::addOption(const QString &displayName, const QString &toolTip)
@@ -1156,8 +1149,11 @@ void SelectionAspect::addOption(const QString &displayName, const QString &toolT
 */
 
 MultiSelectionAspect::MultiSelectionAspect()
-    : d(new Internal::MultiSelectionAspectPrivate)
-{}
+    : d(new Internal::MultiSelectionAspectPrivate(this))
+{
+    setValue(QStringList());
+    setDefaultValue(QStringList());
+}
 
 /*!
     \reimp
@@ -1175,30 +1171,33 @@ void MultiSelectionAspect::addToLayout(LayoutBuilder &builder)
 
     switch (d->m_displayStyle) {
     case DisplayStyle::ListView:
-        d->m_label = createSubWidget<QLabel>(d->m_labelText);
+        setupLabel();
         d->m_listView = createSubWidget<QListWidget>();
-        for (const QString &value : qAsConst(d->m_allValues)) {
-            auto item = new QListWidgetItem(value, d->m_listView);
+        for (const QString &val : qAsConst(d->m_allValues)) {
+            auto item = new QListWidgetItem(val, d->m_listView);
             item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-            item->setCheckState(d->m_value.contains(item->text()) ? Qt::Checked : Qt::Unchecked);
+            item->setCheckState(value().contains(item->text()) ? Qt::Checked : Qt::Unchecked);
         }
         connect(d->m_listView, &QListWidget::itemChanged, this,
             [this](QListWidgetItem *item) {
             if (d->setValueSelectedHelper(item->text(), item->checkState() & Qt::Checked))
                 emit changed();
         });
-        builder.addItems({d->m_label.data(), d->m_listView.data()});
+        builder.addItems({label(), d->m_listView.data()});
     }
 }
 
-bool Internal::MultiSelectionAspectPrivate::setValueSelectedHelper(const QString &value, bool on)
+bool Internal::MultiSelectionAspectPrivate::setValueSelectedHelper(const QString &val, bool on)
 {
-    if (on && !m_value.contains(value)) {
-        m_value.append(value);
+    QStringList list = q->value();
+    if (on && !list.contains(val)) {
+        list.append(val);
+        q->setValue(list);
         return true;
     }
-    if (!on && m_value.contains(value)) {
-        m_value.removeOne(value);
+    if (!on && list.contains(val)) {
+        list.removeOne(val);
+        q->setValue(list);
         return true;
     }
     return false;
@@ -1214,43 +1213,10 @@ void MultiSelectionAspect::setAllValues(const QStringList &val)
     d->m_allValues = val;
 }
 
-void MultiSelectionAspect::setLabelText(const QString &labelText)
-{
-    d->m_labelText = labelText;
-}
-
-void Internal::MultiSelectionAspectPrivate::updateListView()
-{
-    if (!m_listView)
-        return;
-    const int n = m_listView->count();
-    QTC_CHECK(n == m_allValues.size());
-    for (int i = 0; i != n; ++i) {
-        auto item = m_listView->item(i);
-        item->setCheckState(m_value.contains(item->text()) ? Qt::Checked : Qt::Unchecked);
-    }
-}
-
-/*!
-    \reimp
-*/
-void MultiSelectionAspect::fromMap(const QVariantMap &map)
-{
-    d->m_value = map.value(settingsKey(), QStringList()).toStringList();
-}
-
-/*!
-    \reimp
-*/
-void MultiSelectionAspect::toMap(QVariantMap &data) const
-{
-    saveToMap(data, d->m_value, QStringList());
-}
-
 void MultiSelectionAspect::setVisibleDynamic(bool visible)
 {
-    if (d->m_label)
-        d->m_label->setVisible(visible);
+    if (QLabel *l = label())
+        l->setVisible(visible);
     if (d->m_listView)
         d->m_listView->setVisible(visible);
 }
@@ -1262,16 +1228,23 @@ void MultiSelectionAspect::setDisplayStyle(MultiSelectionAspect::DisplayStyle st
 
 QStringList MultiSelectionAspect::value() const
 {
-    return d->m_value;
+    return BaseAspect::value().toStringList();
 }
 
 void MultiSelectionAspect::setValue(const QStringList &value)
 {
-    if (d->m_value == value)
-        return;
-    d->m_value = value;
-    d->updateListView();
-    emit changed();
+    if (BaseAspect::setValueQuietly(value)) {
+        if (d->m_listView) {
+            const int n = d->m_listView->count();
+            QTC_CHECK(n == d->m_allValues.size());
+            for (int i = 0; i != n; ++i) {
+                auto item = d->m_listView->item(i);
+                item->setCheckState(value.contains(item->text()) ? Qt::Checked : Qt::Unchecked);
+            }
+        } else {
+            emit changed();
+        }
+    }
 }
 
 
@@ -1293,7 +1266,9 @@ void MultiSelectionAspect::setValue(const QStringList &value)
 
 IntegerAspect::IntegerAspect()
     : d(new Internal::IntegerAspectPrivate)
-{}
+{
+    setDefaultValue(qint64(0));
+}
 
 /*!
     \reimp
@@ -1305,12 +1280,11 @@ IntegerAspect::~IntegerAspect() = default;
 */
 void IntegerAspect::addToLayout(LayoutBuilder &builder)
 {
-    QTC_CHECK(!d->m_label);
-    d->m_label = createSubWidget<QLabel>(d->m_labelText);
+    setupLabel();
 
     QTC_CHECK(!d->m_spinBox);
     d->m_spinBox = createSubWidget<QSpinBox>();
-    d->m_spinBox->setValue(int(d->m_value / d->m_displayScaleFactor));
+    d->m_spinBox->setValue(int(value() / d->m_displayScaleFactor));
     d->m_spinBox->setDisplayIntegerBase(d->m_displayIntegerBase);
     d->m_spinBox->setPrefix(d->m_prefix);
     d->m_spinBox->setSuffix(d->m_suffix);
@@ -1318,40 +1292,25 @@ void IntegerAspect::addToLayout(LayoutBuilder &builder)
         d->m_spinBox->setRange(int(d->m_minimumValue.toLongLong() / d->m_displayScaleFactor),
                                int(d->m_maximumValue.toLongLong() / d->m_displayScaleFactor));
 
-    builder.addItems({d->m_label.data(), d->m_spinBox.data()});
+    builder.addItems({label(), d->m_spinBox.data()});
     connect(d->m_spinBox.data(), QOverload<int>::of(&QSpinBox::valueChanged),
             this, [this](int value) {
-        d->m_value = value * d->m_displayScaleFactor;
-        emit changed();
+        setValue(value * d->m_displayScaleFactor);
     });
-}
-
-/*!
-    \reimp
-*/
-void IntegerAspect::fromMap(const QVariantMap &map)
-{
-    d->m_value = map.value(settingsKey(), d->m_defaultValue).toLongLong();
-}
-
-/*!
-    \reimp
-*/
-void IntegerAspect::toMap(QVariantMap &data) const
-{
-    saveToMap(data, d->m_value, d->m_defaultValue);
 }
 
 qint64 IntegerAspect::value() const
 {
-    return d->m_value;
+    return BaseAspect::value().toLongLong();
 }
 
 void IntegerAspect::setValue(qint64 value)
 {
-    d->m_value = value;
-    if (d->m_spinBox)
-        d->m_spinBox->setValue(int(d->m_value / d->m_displayScaleFactor));
+    if (setValueQuietly(value)) {
+        if (d->m_spinBox)
+            d->m_spinBox->setValue(int(value / d->m_displayScaleFactor));
+        emit changed();
+    }
 }
 
 void IntegerAspect::setRange(qint64 min, qint64 max)
@@ -1362,9 +1321,7 @@ void IntegerAspect::setRange(qint64 min, qint64 max)
 
 void IntegerAspect::setLabel(const QString &label)
 {
-    d->m_labelText = label;
-    if (d->m_label)
-        d->m_label->setText(label);
+    setLabelText(label);
 }
 
 void IntegerAspect::setPrefix(const QString &prefix)
@@ -1389,7 +1346,7 @@ void IntegerAspect::setDisplayScaleFactor(qint64 factor)
 
 void IntegerAspect::setDefaultValue(qint64 defaultValue)
 {
-    d->m_defaultValue = defaultValue;
+    BaseAspect::setDefaultValue(defaultValue);
 }
 
 /*!
@@ -1406,20 +1363,26 @@ TriStateAspect::TriStateAspect(const QString onString, const QString &offString,
                                const QString &defaultString)
 {
     setDisplayStyle(DisplayStyle::ComboBox);
-    setDefaultValue(2);
+    setValue(TriState::Default);
+    setDefaultValue(TriState::Default);
     addOption(onString);
     addOption(offString);
     addOption(defaultString);
 }
 
-TriState TriStateAspect::setting() const
+TriState TriStateAspect::value() const
 {
-    return TriState::fromVariant(value());
+    return TriState::fromVariant(BaseAspect::value());
 }
 
-void TriStateAspect::setSetting(TriState setting)
+void TriStateAspect::setValue(TriState value)
 {
-    setValue(setting.toVariant().toInt());
+    BaseAspect::setValue(value.toVariant());
+}
+
+void TriStateAspect::setDefaultValue(TriState value)
+{
+    BaseAspect::setDefaultValue(value.toVariant());
 }
 
 const TriState TriState::Enabled{TriState::EnabledValue};
@@ -1444,7 +1407,9 @@ TriState TriState::fromVariant(const QVariant &variant)
 
 StringListAspect::StringListAspect()
     : d(new Internal::StringListAspectPrivate)
-{}
+{
+    setDefaultValue(QStringList());
+}
 
 /*!
     \reimp
@@ -1460,30 +1425,14 @@ void StringListAspect::addToLayout(LayoutBuilder &builder)
     // TODO - when needed.
 }
 
-/*!
-    \reimp
-*/
-void StringListAspect::fromMap(const QVariantMap &map)
-{
-    d->m_value = map.value(settingsKey()).toStringList();
-}
-
-/*!
-    \reimp
-*/
-void StringListAspect::toMap(QVariantMap &data) const
-{
-    saveToMap(data, d->m_value, QStringList());
-}
-
 QStringList StringListAspect::value() const
 {
-    return d->m_value;
+    return BaseAspect::value().toStringList();
 }
 
 void StringListAspect::setValue(const QStringList &value)
 {
-    d->m_value = value;
+    BaseAspect::setValue(value);
 }
 
 /*!
@@ -1569,7 +1518,7 @@ void AspectContainer::addAspectHelper(BaseAspect *aspect)
 */
 void AspectContainer::addToLayout(LayoutBuilder &builder)
 {
-    for (BaseAspect *aspect : d->m_items) {
+    for (BaseAspect *aspect : qAsConst(d->m_items)) {
         if (aspect->isVisible())
             aspect->addToLayout(builder);
     }
@@ -1580,7 +1529,7 @@ void AspectContainer::addToLayout(LayoutBuilder &builder)
 */
 void AspectContainer::fromMap(const QVariantMap &map)
 {
-    for (BaseAspect *aspect : d->m_items)
+    for (BaseAspect *aspect : qAsConst(d->m_items))
         aspect->fromMap(map);
 }
 
@@ -1589,7 +1538,7 @@ void AspectContainer::fromMap(const QVariantMap &map)
 */
 void AspectContainer::toMap(QVariantMap &map) const
 {
-    for (BaseAspect *aspect : d->m_items)
+    for (BaseAspect *aspect : qAsConst(d->m_items))
         aspect->toMap(map);
 }
 

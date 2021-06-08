@@ -29,12 +29,13 @@
 #include "cmakebuildtarget.h"
 #include "cmakeprojectnodes.h"
 #include "fileapireader.h"
-#include "utils/macroexpander.h"
 
 #include <projectexplorer/buildsystem.h>
 
 #include <utils/fileutils.h>
 #include <utils/temporarydirectory.h>
+
+#include <QFutureSynchronizer>
 
 namespace ProjectExplorer { class ExtraCompiler; }
 
@@ -43,9 +44,10 @@ class CppProjectUpdater;
 } // namespace CppTools
 
 namespace CMakeProjectManager {
-namespace Internal {
 
 class CMakeBuildConfiguration;
+
+namespace Internal {
 
 // --------------------------------------------------------------------
 // CMakeBuildSystem:
@@ -97,6 +99,8 @@ public:
     static CMakeConfig parseCMakeCacheDotTxt(const Utils::FilePath &cacheFile,
                                              QString *errorMessage);
 
+    static bool filteredOutTarget(const CMakeBuildTarget &target);
+
     bool isMultiConfig() const;
     bool usesAllCapsTargets() const;
 
@@ -116,7 +120,7 @@ private:
     void setParametersAndRequestParse(const BuildDirParameters &parameters,
                                       const int reparseParameters);
 
-    bool mustApplyExtraArguments() const;
+    bool mustApplyExtraArguments(const BuildDirParameters &parameters) const;
 
     // State handling:
     // Parser states:
@@ -132,6 +136,8 @@ private:
     std::unique_ptr<CMakeProjectNode> generateProjectTree(
         const QList<const ProjectExplorer::FileNode *> &allFiles, bool includeHeadersNode);
     void checkAndReportError(QString &errorMessage);
+
+    void updateCMakeConfiguration(QString &errorMessage);
 
     void updateProjectData();
     void updateFallbackProjectData();
@@ -177,6 +183,7 @@ private:
     // CTest integration
     QString m_ctestPath;
     QList<ProjectExplorer::TestCaseInfo> m_testNames;
+    QFutureSynchronizer<QByteArray> m_futureSynchronizer;
 };
 
 } // namespace Internal

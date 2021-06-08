@@ -504,7 +504,7 @@ void SubmitEditorWidget::hideDescription()
     setDescriptionMandatory(false);
 }
 
-void VcsBase::SubmitEditorWidget::verifyDescription()
+void SubmitEditorWidget::verifyDescription()
 {
     auto fontColor = [](Utils::Theme::Color color) {
         return QString("<font color=\"%1\">")
@@ -519,8 +519,10 @@ void VcsBase::SubmitEditorWidget::verifyDescription()
     int secondLineLength = 0;
     if (subjectLength >= 0) {
         const int secondLineStart = subjectLength + 1;
-        secondLineLength = d->m_description.indexOf(newLine, secondLineStart)
-                - secondLineStart;
+        int secondLineEnd = d->m_description.indexOf(newLine, secondLineStart);
+        if (secondLineEnd == -1)
+            secondLineEnd = descriptionLength;
+        secondLineLength = secondLineEnd - secondLineStart;
     } else {
         subjectLength = descriptionLength;
     }
@@ -546,10 +548,10 @@ void VcsBase::SubmitEditorWidget::verifyDescription()
                        "<ul>"
                        "<li>Avoid very short commit messages.</li>"
                        "<li>Consider the first line as subject (like in email) "
-                       "and keep it shorter than %1 characters.</li>"
+                       "and keep it shorter than %n characters.</li>"
                        "<li>After an empty second line, a longer description can be added.</li>"
                        "<li>Describe why the change was done, not how it was done.</li>"
-                       "</ul>").arg(MaxSubjectLength));
+                       "</ul>", nullptr, MaxSubjectLength));
         }
 }
 

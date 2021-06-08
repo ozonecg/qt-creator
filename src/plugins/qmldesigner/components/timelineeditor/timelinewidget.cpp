@@ -205,9 +205,10 @@ TimelineWidget::TimelineWidget(TimelineView *view)
     auto *topSpacer = new QSpacerItem(40, 20, QSizePolicy::Minimum, QSizePolicy::Expanding);
     auto *bottomSpacer = new QSpacerItem(40, 20, QSizePolicy::Minimum, QSizePolicy::Expanding);
 
-    QString labelText =
-            tr("This file does not contain a timeline. <br><br> \
-            To create an animation, add a timeline by clicking the + button.");
+    const QString labelText =
+            tr("This file does not contain a timeline. <br><br>"
+               "To create an animation, add a timeline by clicking the + button.");
+
     onboardingTopLabel->setText(labelText);
     onboardingTopLabel->setAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
 
@@ -241,7 +242,7 @@ TimelineWidget::TimelineWidget(TimelineView *view)
     {
         QPalette timelinePalette;
         timelinePalette.setColor(QPalette::Text, Utils::creatorTheme()->color(
-                                     Utils::Theme::QmlDesigner_FormEditorForegroundColor));
+                                     Utils::Theme::DStextColor));
         timelinePalette.setColor(QPalette::WindowText, timelinePalette.color(QPalette::Text));
         timelinePalette.setColor(QPalette::Window, Utils::creatorTheme()->color(
                                      Utils::Theme::QmlDesigner_BackgroundColorDarkAlternate));
@@ -532,7 +533,10 @@ void TimelineWidget::showEvent(QShowEvent *event)
 {
     Q_UNUSED(event)
 
+    /*
     m_timelineView->setEnabled(true);
+     TODO See QDS-4191
+    */
 
     if (m_timelineView->model())
         init();
@@ -553,7 +557,7 @@ void TimelineWidget::resizeEvent(QResizeEvent *event)
 
 void TimelineWidget::hideEvent(QHideEvent *event)
 {
-    m_timelineView->setEnabled(false);
+    /* m_timelineView->setEnabled(false); TODO See QDS-4191 */
     QWidget::hideEvent(event);
 }
 

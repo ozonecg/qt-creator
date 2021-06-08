@@ -870,7 +870,9 @@ static QStringList uniqueTargetFiles(const Configuration &config)
     return files;
 }
 
-FileApiData FileApiParser::parseData(const QFileInfo &replyFileInfo, const QString &cmakeBuildType,
+FileApiData FileApiParser::parseData(QFutureInterface<std::shared_ptr<FileApiQtcData>> &fi,
+                                     const QFileInfo &replyFileInfo,
+                                     const QString &cmakeBuildType,
                                      QString &errorMessage)
 {
     QTC_CHECK(errorMessage.isEmpty());
@@ -878,31 +880,63 @@ FileApiData FileApiParser::parseData(const QFileInfo &replyFileInfo, const QStri
 
     FileApiData result;
 
+    const auto cancelCheck = [&fi, &errorMessage]() -> bool {
+        if (fi.isCanceled()) {
+            errorMessage = FileApiParser::tr("CMake parsing was cancelled.");
+            return true;
+        }
+        return false;
+    };
+
     result.replyFile = readReplyFile(replyFileInfo, errorMessage);
+    if (cancelCheck())
+        return {};
     result.cache = readCacheFile(result.replyFile.jsonFile("cache", replyDir), errorMessage);
+    if (cancelCheck())
+        return {};
     result.cmakeFiles = readCMakeFilesFile(result.replyFile.jsonFile("cmakeFiles", replyDir),
                                            errorMessage);
+    if (cancelCheck())
+        return {};
     auto codeModels = readCodemodelFile(result.replyFile.jsonFile("codemodel", replyDir),
                                          errorMessage);
 
     if (codeModels.size() == 0) {
         errorMessage = "No CMake configuration found!";
-        qWarning() << errorMessage;
         return result;
     }
 
     auto it = std::find_if(codeModels.cbegin(), codeModels.cend(),
-                           [cmakeBuildType](const Configuration& cfg) { return cfg.name == cmakeBuildType; });
+                           [cmakeBuildType](const Configuration& cfg) {
+                               return QString::compare(cfg.name, cmakeBuildType, Qt::CaseInsensitive) == 0;
+                           });
     if (it == codeModels.cend()) {
-        errorMessage = QString("No '%1' CMake configuration found!").arg(cmakeBuildType);
-        qWarning() << errorMessage;
+        QStringList buildTypes;
+        for (const Configuration &cfg: codeModels)
+            buildTypes << cfg.name;
+
+        if (result.replyFile.isMultiConfig) {
+            errorMessage = tr("No \"%1\" CMake configuration found. Available configurations: \"%2\".\n"
+                              "Make sure that CMAKE_CONFIGURATION_TYPES variable contains the \"Build type\" field.")
+                           .arg(cmakeBuildType)
+                           .arg(buildTypes.join(", "));
+        } else {
+            errorMessage = tr("No \"%1\" CMake configuration found. Available configuration: \"%2\".\n"
+                              "Make sure that CMAKE_BUILD_TYPE variable matches the \"Build type\" field.")
+                           .arg(cmakeBuildType)
+                           .arg(buildTypes.join(", "));
+        }
         return result;
     }
     result.codemodel = std::move(*it);
+    if (cancelCheck())
+        return {};
 
     const QStringList targetFiles = uniqueTargetFiles(result.codemodel);
 
     for (const QString &targetFile : targetFiles) {
+        if (cancelCheck())
+            return {};
         QString targetErrorMessage;
         TargetDetails td = readTargetFile(replyDir.absoluteFilePath(targetFile), targetErrorMessage);
         if (targetErrorMessage.isEmpty()) {

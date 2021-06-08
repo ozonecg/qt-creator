@@ -98,28 +98,56 @@ void LanguageClientManager::init()
     managerInstance = new LanguageClientManager(LanguageClientPlugin::instance());
 }
 
-void LanguageClientManager::startClient(Client *client)
+void LanguageClientManager::clientStarted(Client *client)
 {
     QTC_ASSERT(managerInstance, return);
     QTC_ASSERT(client, return);
     if (managerInstance->m_shuttingDown) {
-        managerInstance->clientFinished(client);
+        clientFinished(client);
         return;
     }
-    if (!managerInstance->m_clients.contains(client))
-        managerInstance->m_clients.append(client);
-    connect(client, &Client::finished, managerInstance, [client](){
-        managerInstance->clientFinished(client);
-    });
-    if (client->start())
-        client->initialize();
-    else
-        managerInstance->clientFinished(client);
+    if (!managerInstance->m_clients.contains(client)) {
+        managerInstance->m_clients << client;
+        connect(client, &Client::finished, managerInstance, [client]() { clientFinished(client); });
+        connect(client,
+                &Client::initialized,
+                managerInstance,
+                [client](const LanguageServerProtocol::ServerCapabilities &capabilities) {
+                    managerInstance->m_currentDocumentLocatorFilter.updateCurrentClient();
+                    managerInstance->m_inspector.clientInitialized(client->name(), capabilities);
+                });
+        connect(client,
+                &Client::capabilitiesChanged,
+                managerInstance,
+                [client](const DynamicCapabilities &capabilities) {
+                    managerInstance->m_inspector.updateCapabilities(client->name(), capabilities);
+                });
+    }
 
-    connect(client,
-            &Client::initialized,
-            &managerInstance->m_currentDocumentLocatorFilter,
-            &DocumentLocatorFilter::updateCurrentClient);
+    client->initialize();
+}
+
+void LanguageClientManager::clientFinished(Client *client)
+{
+    QTC_ASSERT(managerInstance, return);
+    constexpr int restartTimeoutS = 5;
+    const bool unexpectedFinish = client->state() != Client::Shutdown
+                                  && client->state() != Client::ShutdownRequested;
+    if (unexpectedFinish && !managerInstance->m_shuttingDown && client->reset()) {
+        client->disconnect(managerInstance);
+        client->log(tr("Unexpectedly finished. Restarting in %1 seconds.").arg(restartTimeoutS));
+        QTimer::singleShot(restartTimeoutS * 1000, client, [client]() { client->start(); });
+        for (TextEditor::TextDocument *document : managerInstance->m_clientForDocument.keys(client))
+            client->deactivateDocument(document);
+    } else {
+        if (unexpectedFinish && !managerInstance->m_shuttingDown)
+            client->log(tr("Unexpectedly finished."));
+        for (TextEditor::TextDocument *document : managerInstance->m_clientForDocument.keys(client))
+            managerInstance->m_clientForDocument.remove(document);
+        deleteClient(client);
+        if (managerInstance->m_shuttingDown && managerInstance->m_clients.isEmpty())
+            emit managerInstance->shutdownFinished();
+    }
 }
 
 Client *LanguageClientManager::startClient(BaseSettings *setting, ProjectExplorer::Project *project)
@@ -130,7 +158,7 @@ Client *LanguageClientManager::startClient(BaseSettings *setting, ProjectExplore
     Client *client = setting->createClient();
     QTC_ASSERT(client, return nullptr);
     client->setCurrentProject(project);
-    startClient(client);
+    client->start();
     managerInstance->m_clientsForSetting[setting->m_id].append(client);
     return client;
 }
@@ -365,41 +393,22 @@ void LanguageClientManager::logBaseMessage(const LspLogMessage::MessageSender se
                                            const QString &clientName,
                                            const BaseMessage &message)
 {
-    instance()->m_logger.log(sender, clientName, message);
+    instance()->m_inspector.log(sender, clientName, message);
 }
 
-void LanguageClientManager::showLogger()
+void LanguageClientManager::showInspector()
 {
-    QWidget *loggerWidget = instance()->m_logger.createWidget();
-    loggerWidget->setAttribute(Qt::WA_DeleteOnClose);
-    loggerWidget->show();
+    QString clientName;
+    if (Client *client = clientForDocument(TextEditor::TextDocument::currentTextDocument()))
+        clientName = client->name();
+    QWidget *inspectorWidget = instance()->m_inspector.createWidget(clientName);
+    inspectorWidget->setAttribute(Qt::WA_DeleteOnClose);
+    inspectorWidget->show();
 }
 
 QVector<Client *> LanguageClientManager::reachableClients()
 {
     return Utils::filtered(m_clients, &Client::reachable);
-}
-
-void LanguageClientManager::clientFinished(Client *client)
-{
-    constexpr int restartTimeoutS = 5;
-    const bool unexpectedFinish = client->state() != Client::Shutdown
-            && client->state() != Client::ShutdownRequested;
-    if (unexpectedFinish && !m_shuttingDown && client->reset()) {
-        client->disconnect(this);
-        client->log(tr("Unexpectedly finished. Restarting in %1 seconds.").arg(restartTimeoutS));
-        QTimer::singleShot(restartTimeoutS * 1000, client, [client]() { startClient(client); });
-        for (TextEditor::TextDocument *document : m_clientForDocument.keys(client))
-            client->deactivateDocument(document);
-    } else {
-        if (unexpectedFinish && !m_shuttingDown)
-            client->log(tr("Unexpectedly finished."));
-        for (TextEditor::TextDocument *document : m_clientForDocument.keys(client))
-            m_clientForDocument.remove(document);
-        deleteClient(client);
-        if (m_shuttingDown && m_clients.isEmpty())
-            emit shutdownFinished();
-    }
 }
 
 void LanguageClientManager::editorOpened(Core::IEditor *editor)
@@ -423,15 +432,10 @@ void LanguageClientManager::editorOpened(Core::IEditor *editor)
                         if (auto client = clientForDocument(document))
                             client->symbolSupport().renameSymbol(document, cursor);
                     });
-            connect(widget, &TextEditorWidget::cursorPositionChanged, this, [this, widget]() {
-                // TODO This would better be a compressing timer
-                QTimer::singleShot(50, this, [widget = QPointer<TextEditorWidget>(widget)]() {
-                    if (!widget)
-                        return;
-                    if (Client *client = clientForDocument(widget->textDocument()))
-                        if (client->reachable())
-                            client->cursorPositionChanged(widget);
-                });
+            connect(widget, &TextEditorWidget::cursorPositionChanged, this, [widget]() {
+                if (Client *client = clientForDocument(widget->textDocument()))
+                    if (client->reachable())
+                        client->cursorPositionChanged(widget);
             });
             updateEditorToolBar(editor);
             if (TextEditor::TextDocument *document = textEditor->textDocument()) {
@@ -463,13 +467,17 @@ void LanguageClientManager::documentOpened(Core::IDocument *document)
                         continue;
 
                     // check whether we already have a client running for this project
-                    if (Utils::findOrDefault(clients,
-                                             [project](const QPointer<Client> &client) {
-                                                 return client->project() == project;
-                                             })) {
-                        continue;
+                    Client *clientForProject = Utils::findOrDefault(clients,
+                                                                    [project](Client *client) {
+                                                                        return client->project()
+                                                                               == project;
+                                                                    });
+                    if (!clientForProject) {
+                        clientForProject = startClient(setting, project);
+                        clients << clientForProject;
                     }
-                    clients << startClient(setting, project);
+                    QTC_ASSERT(clientForProject, continue);
+                    openDocumentWithClient(textDocument, clientForProject);
                 }
             } else if (setting->m_startBehavior == BaseSettings::RequiresFile && clients.isEmpty()) {
                 clients << startClient(setting);

@@ -29,7 +29,7 @@
 #include "sqlitedatabasebackend.h"
 #include "sqliteexception.h"
 
-#include "sqlite3.h"
+#include "sqlite.h"
 
 #include <condition_variable>
 #include <mutex>
@@ -687,7 +687,8 @@ StringType textForColumn(sqlite3_stmt *sqlStatment, int column)
 
 BlobView blobForColumn(sqlite3_stmt *sqlStatment, int column)
 {
-    const byte *blob = reinterpret_cast<const byte *>(sqlite3_column_blob(sqlStatment, column));
+    const std::byte *blob = reinterpret_cast<const std::byte *>(
+        sqlite3_column_blob(sqlStatment, column));
     std::size_t size = std::size_t(sqlite3_column_bytes(sqlStatment, column));
 
     return {blob, size};
@@ -716,7 +717,7 @@ StringType convertToTextForColumn(sqlite3_stmt *sqlStatment, int column)
         break;
     }
 
-    return StringType{"", 0};
+    return {};
 }
 } // namespace
 

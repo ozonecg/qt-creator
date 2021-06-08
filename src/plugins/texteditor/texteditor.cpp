@@ -2003,7 +2003,7 @@ void TextEditorWidgetPrivate::moveLineUpDown(bool up)
         move.setPosition(cursor.selectionStart());
         move.movePosition(QTextCursor::StartOfBlock);
         move.setPosition(cursor.selectionEnd(), QTextCursor::KeepAnchor);
-        move.movePosition(move.atBlockStart() ? QTextCursor::Left: QTextCursor::EndOfBlock,
+        move.movePosition(move.atBlockStart() ? QTextCursor::PreviousCharacter: QTextCursor::EndOfBlock,
                           QTextCursor::KeepAnchor);
     } else {
         move.movePosition(QTextCursor::StartOfBlock);
@@ -2028,19 +2028,19 @@ void TextEditorWidgetPrivate::moveLineUpDown(bool up)
         }
     }
 
-    move.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor);
+    move.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
     move.removeSelectedText();
 
     if (up) {
         move.movePosition(QTextCursor::PreviousBlock);
         move.insertBlock();
-        move.movePosition(QTextCursor::Left);
+        move.movePosition(QTextCursor::PreviousCharacter);
     } else {
         move.movePosition(QTextCursor::EndOfBlock);
         if (move.atBlockStart()) { // empty block
             move.movePosition(QTextCursor::NextBlock);
             move.insertBlock();
-            move.movePosition(QTextCursor::Left);
+            move.movePosition(QTextCursor::PreviousCharacter);
         } else {
             move.insertBlock();
         }
@@ -3673,7 +3673,7 @@ void TextEditorWidgetPrivate::highlightSearchResults(const QTextBlock &block, co
     QString text = block.text();
     text.replace(QChar::Nbsp, QLatin1Char(' '));
     int idx = -1;
-    int l = 1;
+    int l = 0;
 
     const int left = data.viewportRect.left() - int(data.offset.x());
     const int right = data.viewportRect.right() - int(data.offset.x());
@@ -5143,11 +5143,11 @@ void TextEditorWidgetPrivate::paintTextMarks(QPainter &painter, const ExtraAreaP
     TextMarks marks = userData->marks();
     TextMarks::const_iterator it = marks.constBegin();
     if (marks.size() > 3) {
-        // We want the 3 with the highest priority so iterate from the back
+        // We want the 3 with the highest priority that have an icon so iterate from the back
         int count = 0;
         it = marks.constEnd() - 1;
         while (it != marks.constBegin()) {
-            if ((*it)->isVisible())
+            if ((*it)->isVisible() && !(*it)->icon().isNull())
                 ++count;
             if (count == 3)
                 break;
@@ -5157,7 +5157,7 @@ void TextEditorWidgetPrivate::paintTextMarks(QPainter &painter, const ExtraAreaP
     TextMarks::const_iterator end = marks.constEnd();
     for ( ; it != end; ++it) {
         TextMark *mark = *it;
-        if (!mark->isVisible())
+        if (!mark->isVisible() && !mark->icon().isNull())
             continue;
         const int height = data.lineSpacing - 1;
         const int width = int(.5 + height * mark->widthFactor());
@@ -6010,6 +6010,7 @@ void TextEditorWidgetPrivate::toggleBlockVisible(const QTextBlock &block)
 void TextEditorWidget::setLanguageSettingsId(Id settingsId)
 {
     d->m_tabSettingsId = settingsId;
+    setCodeStyle(TextEditorSettings::codeStyle(settingsId));
 }
 
 Id TextEditorWidget::languageSettingsId() const
@@ -6019,20 +6020,24 @@ Id TextEditorWidget::languageSettingsId() const
 
 void TextEditorWidget::setCodeStyle(ICodeStylePreferences *preferences)
 {
-    textDocument()->indenter()->setCodeStylePreferences(preferences);
+    TextDocument *document = d->m_document.data();
+    // Not fully initialized yet... wait for TextEditorWidgetPrivate::setupDocumentSignals
+    if (!document)
+        return;
+    document->indenter()->setCodeStylePreferences(preferences);
     if (d->m_codeStylePreferences) {
         disconnect(d->m_codeStylePreferences, &ICodeStylePreferences::currentTabSettingsChanged,
-                   d->m_document.data(), &TextDocument::setTabSettings);
+                   document, &TextDocument::setTabSettings);
         disconnect(d->m_codeStylePreferences, &ICodeStylePreferences::currentValueChanged,
                    this, &TextEditorWidget::slotCodeStyleSettingsChanged);
     }
     d->m_codeStylePreferences = preferences;
     if (d->m_codeStylePreferences) {
         connect(d->m_codeStylePreferences, &ICodeStylePreferences::currentTabSettingsChanged,
-                d->m_document.data(), &TextDocument::setTabSettings);
+                document, &TextDocument::setTabSettings);
         connect(d->m_codeStylePreferences, &ICodeStylePreferences::currentValueChanged,
                 this, &TextEditorWidget::slotCodeStyleSettingsChanged);
-        d->m_document->setTabSettings(d->m_codeStylePreferences->currentTabSettings());
+        document->setTabSettings(d->m_codeStylePreferences->currentTabSettings());
         slotCodeStyleSettingsChanged(d->m_codeStylePreferences->currentValue());
     }
 }
@@ -7761,7 +7766,6 @@ void TextEditorWidget::insertFromMimeData(const QMimeData *source)
             const int anchor = cursor.position();
             cursor.insertText(text);
             const int pos = cursor.position();
-            cursor.endEditBlock();
             cursor.setPosition(anchor);
             cursor.setPosition(pos, QTextCursor::KeepAnchor);
         } else {

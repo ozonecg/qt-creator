@@ -60,6 +60,7 @@
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QTextCodec>
 
 #include <string>
 #include <vector>
@@ -536,9 +537,11 @@ int main(int argc, char **argv)
         }
     }
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     if (!qEnvironmentVariableIsSet("QT_OPENGL"))
         QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
+#else
+    qputenv("QSG_RHI_BACKEND", "opengl");
 #endif
 
     if (qEnvironmentVariableIsSet("QTCREATOR_DISABLE_NATIVE_MENUBAR")
@@ -660,6 +663,10 @@ int main(int argc, char **argv)
             break;
         }
     }
+
+    QByteArray overrideCodecForLocale = settings->value("General/OverrideCodecForLocale").toByteArray();
+    if (!overrideCodecForLocale.isEmpty())
+        QTextCodec::setCodecForLocale(QTextCodec::codecForName(overrideCodecForLocale));
 
     app.setDesktopFileName("org.qt-project.qtcreator.desktop");
 

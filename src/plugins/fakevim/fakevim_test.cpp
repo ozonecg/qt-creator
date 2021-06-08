@@ -2534,6 +2534,8 @@ void FakeVimPlugin::test_vim_copy_paste()
     KEYS("yy", "abc" N "abc" N X "def" N "ghi");
     KEYS("\"xp", "abc" N "abc" N "def" N X "abc" N "ghi");
     KEYS(".", "abc" N "abc" N "def" N "abc" N X "abc" N "ghi");
+    KEYS("\"xP", "abc" N "abc" N "def" N "abc" N X "abc" N "abc" N "ghi");
+    KEYS(".", "abc" N "abc" N "def" N "abc" N X "abc" N "abc" N "abc" N "ghi");
 
     // delete to black hole register
     data.setText("aaa bbb ccc");
@@ -4315,6 +4317,100 @@ void FakeVimPlugin::test_vim_exchange_emulation()
     KEYS("cxx", "abc" N "def");
     KEYS("j", "abc" N "def");
     KEYS(".", "def" N "abc");
+}
+
+void FakeVimPlugin::test_vim_arg_text_obj_emulation()
+{
+    TestData data;
+    setup(&data);
+    data.doCommand("set argtextobj");
+
+    data.setText("foo(int" X " i, double d, float f)");
+    KEYS("dia", "foo(" X ", double d, float f)");
+    KEYS("wdia", "foo(, " X ", float f)");
+    KEYS("wdia", "foo(, , " X ")");
+
+    data.setText("foo(int" X " i, double d, float f, long l)");
+    KEYS("daa", "foo(" X "double d, float f, long l)");
+    KEYS("WWdaa", "foo(double d" X ", long l)");
+    KEYS("Wdaa", "foo(double d)");
+    KEYS("daa", "foo()");
+
+    data.setText("foo(std::map<int" X ", double> map)");
+    KEYS("dia", "foo()");
+
+    data.setText("foo(const C c" X " = C(bar, baz))");
+    KEYS("dia", "foo()");
+}
+
+void FakeVimPlugin::test_vim_surround_emulation()
+{
+    TestData data;
+    setup(&data);
+    data.doCommand("set surround");
+
+    // ys and ds
+    data.setText("abc");
+    KEYS(R"(ysawb)",      R"((abc))");
+    KEYS(R"(ysabB)",     R"({(abc)})");
+    KEYS(R"(ysaB])",    R"([{(abc)}])");
+    KEYS(R"(ysa]>)",   R"(<[{(abc)}]>)");
+    KEYS(R"(ysa>")",  R"("<[{(abc)}]>")");
+    KEYS(R"(ysa"')", R"('"<[{(abc)}]>"')");
+    KEYS(R"(ds')",    R"("<[{(abc)}]>")");
+    KEYS(R"(ds")",     R"(<[{(abc)}]>)");
+    KEYS(R"(ds>)",      R"([{(abc)}])");
+    KEYS(R"(ds])",       R"({(abc)})");
+    KEYS(R"(ds})",        R"((abc))");
+    KEYS(R"(ds))",         R"(abc)");
+
+    data.setText("abc d|ef ghi");
+    KEYS("ysiWb", "abc (def) ghi");
+    KEYS(".", "abc ((def)) ghi");
+    KEYS("dsb", "abc (def) ghi");
+    KEYS(".", "abc def ghi");
+    KEYS("ysaWb", "abc (def) ghi");
+    KEYS(".", "abc ((def)) ghi");
+    KEYS("dsb", "abc (def) ghi");
+    KEYS(".", "abc def ghi");
+
+    // yss
+    data.setText("\t" "abc");
+    KEYS("yssb", "\t" "(abc)");
+    KEYS(".", "\t" "((abc))");
+
+    // Surround with function
+    data.setText("abc");
+    KEYS("ysiWftest<CR>", "test(abc)");
+    KEYS(".", "test(test(abc))");
+
+    // yS puts text on a new line
+    data.setText("abc");
+    KEYS("ySsB", "{" N
+                 "abc" N
+                 "}");
+
+    // cs
+    data.setText("(abc)");
+    KEYS(R"(csbB)",   R"({abc})");
+    KEYS(R"(csB])",   R"([abc])");
+    KEYS(R"(cs]>)",   R"(<abc>)");
+    KEYS(R"(cs>")",   R"("abc")");
+    KEYS(R"(cs"')",   R"('abc')");
+
+    // Visual line mode
+    data.setText("abc" N);
+    KEYS("VSB", "{" N
+                 "abc" N
+                 "}" N);
+
+    // Visual char mode
+    data.setText("abc");
+    KEYS("vlSB", "{ab}c");
+
+    // Visual block mode
+    data.setText("abc" N "def");
+    KEYS("<C-v>ljSB", "{ab}c" N "{de}f");
 }
 
 void FakeVimPlugin::test_macros()

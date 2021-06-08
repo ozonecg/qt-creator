@@ -380,7 +380,9 @@ void TokenInfo::identifierKind(const Cursor &cursor, Recursion recursion)
     if (cursor.isInvalidDeclaration())
         return;
 
-    if (recursion == Recursion::FirstPass && cursor.kind() != CXCursor_NotImplemented) {
+    if (recursion == Recursion::FirstPass
+            && cursor.kind() != CXCursor_NotImplemented
+            && cursor.kind() != CXCursor_PreprocessingDirective) {
         const Cursor c = realCursor(cursor);
         if (!clang_isInvalid(c.kind()) && c != cursor) {
             identifierKind(c, Recursion::FirstPass);
@@ -597,12 +599,18 @@ void TokenInfo::punctuationOrOperatorKind()
             break;
     }
 
-    if (m_types.mixinHighlightingTypes.empty() && kind != CXCursor_InclusionDirective) {
+    if (m_types.mainHighlightingType == HighlightingType::Punctuation
+            && m_types.mixinHighlightingTypes.empty()
+            && kind != CXCursor_OverloadedDeclRef
+            && kind != CXCursor_InclusionDirective
+            && kind != CXCursor_PreprocessingDirective) {
         const ClangString spelling = m_token->spelling();
         if (spelling == "<")
             m_types.mixinHighlightingTypes.push_back(HighlightingType::AngleBracketOpen);
         else if (spelling == ">")
             m_types.mixinHighlightingTypes.push_back(HighlightingType::AngleBracketClose);
+        else if (spelling == ">>")
+            m_types.mixinHighlightingTypes.push_back(HighlightingType::DoubleAngleBracketClose);
     }
 
     if (isOutputArgument())

@@ -38,6 +38,8 @@
 #include <QObject>
 #include <QDateTime>
 
+#include <memory>
+
 namespace ProjectExplorer {
 class ProjectNode;
 }
@@ -89,6 +91,9 @@ private:
     void cmakeFinishedState(int code, QProcess::ExitStatus status);
 
     void replyDirectoryHasChanged(const QString &directory) const;
+    void makeBackupConfiguration(bool store);
+
+    void writeConfigurationIntoBuildDirectory(const QStringList &configuration);
 
     std::unique_ptr<CMakeProcess> m_cmakeProcess;
 
@@ -104,7 +109,7 @@ private:
     bool m_usesAllCapsTargets = false;
     int m_lastCMakeExitCode = 0;
 
-    Utils::optional<QFuture<FileApiQtcData *>> m_future;
+    Utils::optional<QFuture<std::shared_ptr<FileApiQtcData>>> m_future;
 
     // Update related:
     bool m_isParsing = false;

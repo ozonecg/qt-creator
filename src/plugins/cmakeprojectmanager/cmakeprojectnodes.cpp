@@ -31,6 +31,7 @@
 #include <android/androidconstants.h>
 #include <coreplugin/fileiconprovider.h>
 #include <ios/iosconstants.h>
+#include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/target.h>
 
 #include <utils/qtcassert.h>
@@ -45,7 +46,9 @@ CMakeInputsNode::CMakeInputsNode(const Utils::FilePath &cmakeLists) :
 {
     setPriority(Node::DefaultPriority - 10); // Bottom most!
     setDisplayName(QCoreApplication::translate("CMakeFilesProjectNode", "CMake Modules"));
-    setIcon(QIcon(":/projectexplorer/images/session.png")); // TODO: Use a better icon!
+    static const QIcon modulesIcon = Core::FileIconProvider::directoryIcon(
+                ProjectExplorer::Constants::FILEOVERLAY_MODULES);
+    setIcon(modulesIcon);
     setListInProject(false);
 }
 
@@ -71,7 +74,9 @@ CMakeProjectNode::CMakeProjectNode(const Utils::FilePath &directory) :
     ProjectExplorer::ProjectNode(directory)
 {
     setPriority(Node::DefaultProjectPriority + 1000);
-    setIcon(QIcon(":/projectexplorer/images/projectexplorer.png")); // TODO: Use proper icon!
+    static const QIcon productIcon = Core::FileIconProvider::directoryIcon(
+                ProjectExplorer::Constants::FILEOVERLAY_PRODUCT);
+    setIcon(productIcon);
     setListInProject(false);
 }
 

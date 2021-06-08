@@ -282,7 +282,7 @@ void ModelManagerInterface::loadQmlTypeDescriptionsInternal(const QString &resou
 void ModelManagerInterface::setDefaultProject(const ModelManagerInterface::ProjectInfo &pInfo,
                                               ProjectExplorer::Project *p)
 {
-    QMutexLocker l(mutex());
+    QMutexLocker locker(&m_mutex);
     m_defaultProject = p;
     m_defaultProjectInfo = pInfo;
 }
@@ -1220,7 +1220,7 @@ void ModelManagerInterface::updateImportPaths()
     QSet<QString> newLibraries;
     for (const Document::Ptr &doc : qAsConst(snapshot))
         findNewLibraryImports(doc, snapshot, this, &importedFiles, &scannedPaths, &newLibraries);
-    for (const QString &path : allApplicationDirectories)
+    for (const QString &path : qAsConst(allApplicationDirectories))
         findNewQmlApplicationInPath(path, snapshot, this, &newLibraries);
 
     updateSourceFiles(importedFiles, true);
@@ -1280,11 +1280,6 @@ void ModelManagerInterface::startCppQmlTypeUpdate()
     m_cppQmlTypesUpdater = Utils::runAsync(&ModelManagerInterface::updateCppQmlTypes,
                 this, cppModelManager->snapshot(), m_queuedCppDocuments);
     m_queuedCppDocuments.clear();
-}
-
-QMutex *ModelManagerInterface::mutex() const
-{
-    return &m_mutex;
 }
 
 void ModelManagerInterface::asyncReset()
@@ -1547,7 +1542,7 @@ ViewerContext ModelManagerInterface::projectVContext(Dialect language, const Doc
 
 ModelManagerInterface::ProjectInfo ModelManagerInterface::defaultProjectInfo() const
 {
-    QMutexLocker l(mutex());
+    QMutexLocker locker(&m_mutex);
     return m_defaultProjectInfo;
 }
 

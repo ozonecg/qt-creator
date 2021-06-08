@@ -213,11 +213,11 @@ QList<ITestConfiguration *> TestTreeModel::getTestsForFile(const Utils::FilePath
     return result;
 }
 
-QList<TestTreeItem *> TestTreeModel::testItemsByName(TestTreeItem *root, const QString &testName)
+static QList<ITestTreeItem *> testItemsByName(TestTreeItem *root, const QString &testName)
 {
-    QList<TestTreeItem *> result;
+    QList<ITestTreeItem *> result;
 
-    root->forFirstLevelChildItems([&testName, &result, this](TestTreeItem *node) {
+    root->forFirstLevelChildItems([&testName, &result](TestTreeItem *node) {
         if (node->type() == TestTreeItem::TestSuite || node->type() == TestTreeItem::TestCase) {
             if (node->name() == testName) {
                 result << node;
@@ -295,11 +295,11 @@ const QList<ITestTreeItem *> TestTreeModel::testToolRootNodes() const
     return result;
 }
 
-QList<TestTreeItem *> TestTreeModel::testItemsByName(const QString &testName)
+QList<ITestTreeItem *> TestTreeModel::testItemsByName(const QString &testName)
 {
-    QList<TestTreeItem *> result;
+    QList<ITestTreeItem *> result;
     for (TestTreeItem *frameworkRoot : frameworkRootNodes())
-        result << testItemsByName(frameworkRoot, testName);
+        result << Autotest::testItemsByName(frameworkRoot, testName);
 
     return result;
 }
@@ -381,7 +381,7 @@ void TestTreeModel::synchronizeTestTools()
     for (ITestTreeItem *oldFrameworkRoot : oldFrameworkRoots)
         takeItem(oldFrameworkRoot);  // do NOT delete the ptr is still held by TestFrameworkManager
 
-    for (ITestTool *testTool : tools) {
+    for (ITestTool *testTool : qAsConst(tools)) {
         ITestTreeItem *testToolRootNode = testTool->rootNode();
         if (testTool->active()) {
             invisibleRoot->appendChild(testToolRootNode);
@@ -623,10 +623,6 @@ static Qt::CheckState computeCheckStateByChildren(ITestTreeItem *item)
     bool foundPartiallyChecked = false;
 
     item->forFirstLevelChildren([&](ITestTreeItem *child) {
-        if (foundPartiallyChecked || (foundChecked && foundUnchecked)) {
-            newState = Qt::PartiallyChecked;
-            return;
-        }
         switch (child->type()) {
         case TestTreeItem::TestDataFunction:
         case TestTreeItem::TestSpecialFunction:
@@ -638,6 +634,11 @@ static Qt::CheckState computeCheckStateByChildren(ITestTreeItem *item)
         foundChecked |= (child->checked() == Qt::Checked);
         foundUnchecked |= (child->checked() == Qt::Unchecked);
         foundPartiallyChecked |= (child->checked() == Qt::PartiallyChecked);
+
+        if (foundPartiallyChecked || (foundChecked && foundUnchecked)) {
+            newState = Qt::PartiallyChecked;
+            return;
+        }
     });
 
     if (newState != Qt::PartiallyChecked)
@@ -685,6 +686,8 @@ void Autotest::TestTreeModel::onDataChanged(const QModelIndex &topLeft,
     if (!roles.isEmpty() && !roles.contains(Qt::CheckStateRole))
         return;
 
+    if (!m_checkStateCache) // dataChanged() may be triggered by closing a project
+        return;
     for (int row = topLeft.row(), endRow = bottomRight.row(); row <= endRow; ++row) {
         if (auto item = static_cast<ITestTreeItem *>(itemForIndex(index(row, 0, parent))))
             m_checkStateCache->insert(item, item->checked());
@@ -784,7 +787,7 @@ int TestTreeModel::autoTestsCount() const
     return rootNode ? rootNode->childCount() : 0;
 }
 
-bool TestTreeModel::hasUnnamedQuickTests(const TestTreeItem *rootNode) const
+bool TestTreeModel::hasUnnamedQuickTests(const ITestTreeItem* rootNode) const
 {
     for (int row = 0, count = rootNode->childCount(); row < count; ++row) {
         if (rootNode->childAt(row)->name().isEmpty())
@@ -793,7 +796,7 @@ bool TestTreeModel::hasUnnamedQuickTests(const TestTreeItem *rootNode) const
     return false;
 }
 
-TestTreeItem *TestTreeModel::unnamedQuickTests() const
+ITestTreeItem *TestTreeModel::unnamedQuickTests() const
 {
     TestTreeItem *rootNode = quickRootNode();
     if (!rootNode)
@@ -812,7 +815,7 @@ int TestTreeModel::namedQuickTestsCount() const
 
 int TestTreeModel::unnamedQuickTestsCount() const
 {
-    if (TestTreeItem *unnamed = unnamedQuickTests())
+    if (ITestTreeItem *unnamed = unnamedQuickTests())
         return unnamed->childCount();
     return 0;
 }
@@ -878,7 +881,7 @@ TestTreeSortFilterModel::TestTreeSortFilterModel(TestTreeModel *sourceModel, QOb
     setSourceModel(sourceModel);
 }
 
-void TestTreeSortFilterModel::setSortMode(TestTreeItem::SortMode sortMode)
+void TestTreeSortFilterModel::setSortMode(ITestTreeItem::SortMode sortMode)
 {
     m_sortMode = sortMode;
     invalidate();

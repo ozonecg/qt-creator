@@ -37,6 +37,7 @@
 #include <utils/pathchooser.h>
 #include <utils/qtcassert.h>
 #include <utils/runextensions.h>
+#include <utils/synchronousprocess.h>
 #include <utils/temporarydirectory.h>
 #include <utils/wizard.h>
 #include <utils/wizardpage.h>
@@ -419,6 +420,19 @@ private:
     Data *m_data = nullptr;
 };
 
+static std::function<void(QFileInfo)> postCopyOperation()
+{
+    return [](const QFileInfo &fi) {
+        if (!HostOsInfo::isMacHost())
+            return;
+        // On macOS, downloaded files get a quarantine flag, remove it, otherwise it is a hassle
+        // to get it loaded as a plugin in Qt Creator.
+        SynchronousProcess xattr;
+        xattr.setTimeoutS(1);
+        xattr.runBlocking({"/usr/bin/xattr", {"-d", "com.apple.quarantine", fi.absoluteFilePath()}});
+    };
+}
+
 static bool copyPluginFile(const FilePath &src, const FilePath &dest)
 {
     const FilePath destFile = dest.pathAppended(src.fileName());
@@ -445,6 +459,7 @@ static bool copyPluginFile(const FilePath &src, const FilePath &dest)
                                  .arg(destFile.toUserOutput()));
         return false;
     }
+    postCopyOperation()(destFile.toFileInfo());
     return true;
 }
 
@@ -476,8 +491,8 @@ bool PluginInstallWizard::exec()
             if (!FileUtils::copyRecursively(data.extractedPath,
                                             installPath,
                                             &error,
-                                            FileUtils::CopyAskingForOverwrite(
-                                                ICore::dialogParent()))) {
+                                            FileUtils::CopyAskingForOverwrite(ICore::dialogParent(),
+                                                                              postCopyOperation()))) {
                 QMessageBox::warning(ICore::dialogParent(),
                                      PluginInstallWizard::tr("Failed to Copy Plugin Files"),
                                      error);

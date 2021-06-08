@@ -37,7 +37,6 @@
 #include <imagecache/imagecachestorage.h>
 #include <imagecache/timestampprovider.h>
 #include <import.h>
-#include <importmanagerview.h>
 #include <nodelistproperty.h>
 #include <projectexplorer/kit.h>
 #include <projectexplorer/project.h>
@@ -49,6 +48,7 @@
 #include <utils/algorithm.h>
 #include <qmldesignerplugin.h>
 #include <qmlitemnode.h>
+#include <qmldesignerconstants.h>
 
 namespace QmlDesigner {
 
@@ -80,8 +80,7 @@ public:
 };
 
 ItemLibraryView::ItemLibraryView(QObject* parent)
-    : AbstractView(parent),
-      m_importManagerView(new ImportManagerView(this))
+    : AbstractView(parent)
 
 {
     m_imageCacheData = std::make_unique<ImageCacheData>();
@@ -123,7 +122,6 @@ WidgetInfo ItemLibraryView::widgetInfo()
         m_widget = new ItemLibraryWidget{m_imageCacheData->cache,
                                          m_imageCacheData->asynchronousFontImageCache,
                                          m_imageCacheData->synchronousFontImageCache};
-        m_widget->setImportsWidget(m_importManagerView->widgetInfo().widget);
     }
 
     return createWidgetInfo(m_widget.data(),
@@ -141,7 +139,6 @@ void ItemLibraryView::modelAttached(Model *model)
     m_widget->clearSearchFilter();
     m_widget->setModel(model);
     updateImports();
-    model->attachView(m_importManagerView);
     m_hasErrors = !rewriterView()->errors().isEmpty();
     m_widget->setFlowMode(QmlItemNode(rootModelNode()).isFlowView());
     setResourcePath(DocumentManager::currentResourcePath().toFileInfo().absoluteFilePath());
@@ -149,8 +146,6 @@ void ItemLibraryView::modelAttached(Model *model)
 
 void ItemLibraryView::modelAboutToBeDetached(Model *model)
 {
-    model->detachView(m_importManagerView);
-
     AbstractView::modelAboutToBeDetached(model);
 
     m_widget->setModel(nullptr);
@@ -187,6 +182,16 @@ void ItemLibraryView::importsChanged(const QList<Import> &addedImports, const QL
             resetPuppet();
         }
     }
+}
+
+void ItemLibraryView::possibleImportsChanged(const QList<Import> &possibleImports)
+{
+    m_widget->updatePossibleImports(possibleImports);
+}
+
+void ItemLibraryView::usedImportsChanged(const QList<Import> &usedImports)
+{
+    m_widget->updateUsedImports(usedImports);
 }
 
 void ItemLibraryView::setResourcePath(const QString &resourcePath)
@@ -236,7 +241,7 @@ void ItemLibraryView::updateImport3DSupport(const QVariantMap &supportMap)
         auto handle3DModel = [this](const QStringList &fileNames, const QString &defaultDir) -> bool {
             auto importDlg = new ItemLibraryAssetImportDialog(fileNames, defaultDir,
                                                               m_importableExtensions3DMap,
-                                                              m_importOptions3DMap,
+                                                              m_importOptions3DMap, {}, {},
                                                               Core::ICore::mainWindow());
             importDlg->show();
             return true;
@@ -257,6 +262,17 @@ void ItemLibraryView::updateImport3DSupport(const QVariantMap &supportMap)
     }
 
     m_importOptions3DMap = qvariant_cast<QVariantMap>(supportMap.value("options"));
+}
+
+void ItemLibraryView::customNotification(const AbstractView *view, const QString &identifier,
+                                         const QList<ModelNode> &nodeList, const QList<QVariant> &data)
+{
+    if (identifier == "UpdateImported3DAsset" && nodeList.size() > 0) {
+        ItemLibraryAssetImportDialog::updateImport(nodeList[0], m_importableExtensions3DMap,
+                                                   m_importOptions3DMap);
+    } else {
+        AbstractView::customNotification(view, identifier, nodeList, data);
+    }
 }
 
 } // namespace QmlDesigner

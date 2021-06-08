@@ -29,7 +29,7 @@
 #include "languageclient_global.h"
 #include "languageclientsettings.h"
 #include "locatorfilter.h"
-#include "lsplogger.h"
+#include "lspinspector.h"
 
 #include <utils/id.h>
 
@@ -58,7 +58,8 @@ public:
 
     static void init();
 
-    static void startClient(Client *client);
+    static void clientStarted(Client *client);
+    static void clientFinished(Client *client);
     static Client *startClient(BaseSettings *setting, ProjectExplorer::Project *project = nullptr);
     static QVector<Client *> clients();
 
@@ -94,7 +95,7 @@ public:
     static void logBaseMessage(const LspLogMessage::MessageSender sender,
                                const QString &clientName,
                                const LanguageServerProtocol::BaseMessage &message);
-    static void showLogger();
+    static void showInspector();
 
 signals:
     void shutdownFinished();
@@ -114,8 +115,6 @@ private:
 
     QVector<Client *> reachableClients();
 
-    void clientFinished(Client *client);
-
     bool m_shuttingDown = false;
     QVector<Client *> m_clients;
     QList<BaseSettings *>  m_currentSettings; // owned
@@ -126,6 +125,6 @@ private:
     WorkspaceLocatorFilter m_workspaceLocatorFilter;
     WorkspaceClassLocatorFilter m_workspaceClassLocatorFilter;
     WorkspaceMethodLocatorFilter m_workspaceMethodLocatorFilter;
-    LspLogger m_logger;
+    LspInspector m_inspector;
 };
 } // namespace LanguageClient

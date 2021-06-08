@@ -125,10 +125,11 @@ static const char preferredEditorFactoriesKey[] = "EditorManager/PreferredEditor
 
 static const char scratchBufferKey[] = "_q_emScratchBuffer";
 
+// for lupdate
+using namespace Core;
+
 using namespace Core::Internal;
 using namespace Utils;
-
-namespace Core {
 
 //===================EditorManager=====================
 
@@ -1730,9 +1731,8 @@ bool EditorManagerPrivate::closeEditors(const QList<IEditor*> &editors, CloseFla
             if (editor == viewCurrentEditor && view == views.last()) {
                 // Avoid removing the globally current editor from its view,
                 // set a new current editor before.
-                const EditorManager::OpenEditorFlags flags = view != currentView
-                                                                 ? EditorManager::DoNotChangeCurrentEditor
-                                                                 : EditorManager::NoFlags;
+                EditorManager::OpenEditorFlags flags = view != currentView
+                        ? EditorManager::DoNotChangeCurrentEditor : EditorManager::NoFlags;
                 const QList<IEditor *> viewEditors = view->editors();
                 IEditor *newCurrent = viewEditors.size() > 1 ? viewEditors.at(viewEditors.size() - 2)
                                                              : nullptr;
@@ -1748,8 +1748,17 @@ bool EditorManagerPrivate::closeEditors(const QList<IEditor*> &editors, CloseFla
                         const QList<DocumentModel::Entry *> documents = DocumentModel::entries();
                         if (!documents.isEmpty()) {
                             if (IDocument *document = documents.last()->document) {
+                                // Do not auto-switch to design mode if the new editor will be for
+                                // the same document as the one that was closed.
+                                if (view == currentView && document == editor->document())
+                                    flags = EditorManager::DoNotSwitchToDesignMode;
                                 activateEditorForDocument(view, document, flags);
                             }
+                        } else {
+                            // no documents left - set current view since view->removeEditor can
+                            // trigger a focus change, context change, and updateActions, which
+                            // requests the current EditorView
+                            setCurrentView(currentView);
                         }
                     }
                 }
@@ -1763,10 +1772,12 @@ bool EditorManagerPrivate::closeEditors(const QList<IEditor*> &editors, CloseFla
     foreach (IEditor *editor, acceptedEditors)
         delete editor;
 
-    if (focusView)
+    if (focusView) {
         activateView(focusView);
-    else
+    } else {
+        setCurrentView(currentView);
         setCurrentEditor(currentView->currentEditor());
+    }
 
     if (!EditorManager::currentEditor()) {
         emit m_instance->currentEditorChanged(nullptr);
@@ -3118,14 +3129,14 @@ void EditorManager::openEditorAtSearchResult(const SearchResultItem &item,
                                              OpenEditorFlags flags,
                                              bool *newEditor)
 {
-    if (item.path.empty()) {
-        openEditor(QDir::fromNativeSeparators(item.text), editorId, flags, newEditor);
+    if (item.path().empty()) {
+        openEditor(QDir::fromNativeSeparators(item.lineText()), editorId, flags, newEditor);
         return;
     }
 
-    openEditorAt(QDir::fromNativeSeparators(item.path.first()),
-                 item.mainRange.begin.line,
-                 item.mainRange.begin.column,
+    openEditorAt(QDir::fromNativeSeparators(item.path().first()),
+                 item.mainRange().begin.line,
+                 item.mainRange().begin.column,
                  editorId,
                  flags,
                  newEditor);
@@ -3614,7 +3625,7 @@ bool EditorManager::restoreState(const QByteArray &state)
         // restore windows
         QVector<QVariantHash> windowStates;
         stream >> windowStates;
-        for (const QVariantHash &windowState : windowStates) {
+        for (const QVariantHash &windowState : qAsConst(windowStates)) {
             EditorWindow *window = d->createEditorWindow();
             window->restoreState(windowState);
             window->show();
@@ -3866,5 +3877,3 @@ void CorePlugin::testSplitLineAndColumnNumber_data()
 }
 
 #endif // WITH_TESTS
-
-} // namespace Core

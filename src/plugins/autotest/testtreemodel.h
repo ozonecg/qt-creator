@@ -66,7 +66,7 @@ public:
     QList<ITestConfiguration *> getSelectedTests() const;
     QList<ITestConfiguration *> getFailedTests() const;
     QList<ITestConfiguration *> getTestsForFile(const Utils::FilePath &fileName) const;
-    QList<TestTreeItem *> testItemsByName(const QString &testName);
+    QList<ITestTreeItem *> testItemsByName(const QString &testName);
     void synchronizeTestFrameworks();
     void synchronizeTestTools();
     void rebuild(const QList<Utils::Id> &frameworkIds);
@@ -77,9 +77,9 @@ public:
 #ifdef WITH_TESTS
     int autoTestsCount() const;
     int namedQuickTestsCount() const;
-    bool hasUnnamedQuickTests(const TestTreeItem *rootNode) const;
+    bool hasUnnamedQuickTests(const ITestTreeItem *rootNode) const;
     int unnamedQuickTestsCount() const;
-    TestTreeItem *unnamedQuickTests() const;
+    ITestTreeItem *unnamedQuickTests() const;
     int dataTagsCount() const;
     int gtestNamesCount() const;
     QMultiMap<QString, int> gtestNamesAndSets() const;
@@ -111,7 +111,6 @@ private:
     void revalidateCheckState(ITestTreeItem *item);
     void setupParsingConnections();
     void filterAndInsert(TestTreeItem *item, TestTreeItem *root, bool groupingEnabled);
-    QList<TestTreeItem *> testItemsByName(TestTreeItem *root, const QString &testName);
     void onTargetChanged(ProjectExplorer::Target *target);
     void onBuildSystemTestsUpdated();
     const QList<TestTreeItem *> frameworkRootNodes() const;
@@ -136,7 +135,7 @@ public:
     };
 
     explicit TestTreeSortFilterModel(TestTreeModel *sourceModel, QObject *parent = nullptr);
-    void setSortMode(Autotest::TestTreeItem::SortMode sortMode);
+    void setSortMode(ITestTreeItem::SortMode sortMode);
     void setFilterMode(FilterMode filterMode);
     void toggleFilter(FilterMode filterMode);
     static FilterMode toFilterMode(int f);

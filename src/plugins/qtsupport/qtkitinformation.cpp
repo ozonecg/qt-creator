@@ -222,11 +222,13 @@ void QtKitAspect::fix(Kit *k)
 
     const QString spec = version->mkspec();
     QList<ToolChain *> possibleTcs = ToolChainManager::toolChains([version](const ToolChain *t) {
-        return t->isValid()
-                && t->language() == ProjectExplorer::Constants::CXX_LANGUAGE_ID
-                && contains(version->qtAbis(), [t](const Abi &qtAbi) {
-                       return qtAbi.isFullyCompatibleWith(t->targetAbi());
-                   });
+        if (!t->isValid() || t->language() != ProjectExplorer::Constants::CXX_LANGUAGE_ID)
+            return false;
+        return Utils::anyOf(version->qtAbis(), [t](const Abi &qtAbi) {
+            return t->supportedAbis().contains(qtAbi)
+                   && t->targetAbi().wordWidth() == qtAbi.wordWidth()
+                   && t->targetAbi().architecture() == qtAbi.architecture();
+        });
     });
     if (!possibleTcs.isEmpty()) {
         // Prefer exact matches.
@@ -462,6 +464,11 @@ int QtKitAspect::weight(const Kit *k) const
         return 2;
     return Utils::contains(qt->qtAbis(), [&tcAbi](const Abi &qtAbi) {
         return qtAbi.isCompatibleWith(tcAbi); }) ? 1 : 0;
+}
+
+Id SuppliesQtQuickImportPath::id()
+{
+    return QtSupport::Constants::FLAGS_SUPPLIES_QTQUICK_IMPORT_PATH;
 }
 
 } // namespace QtSupport

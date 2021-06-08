@@ -259,45 +259,27 @@ void GdbEngine::handleResponse(const QString &buff)
     if (buff.isEmpty() || buff == "(gdb) ")
         return;
 
-    const QChar *from = buff.constData();
-    const QChar *to = from + buff.size();
-    const QChar *inner;
+    DebuggerOutputParser parser(buff);
 
-    int token = -1;
-    // Token is a sequence of numbers.
-    for (inner = from; inner != to; ++inner)
-        if (*inner < '0' || *inner > '9')
-            break;
-    if (from != inner) {
-        token = QString(from, inner - from).toInt();
-        from = inner;
-    }
+    const int token = parser.readInt();
 
     // Next char decides kind of response.
-    const QChar c = *from++;
-    switch (c.unicode()) {
+    switch (parser.readChar().unicode()) {
         case '*':
         case '+':
         case '=': {
-            QString asyncClass;
-            for (; from != to; ++from) {
-                const QChar c = *from;
-                if (!isNameChar(c.unicode()))
-                    break;
-                asyncClass += *from;
-            }
-
+            const QString asyncClass = parser.readString(isNameChar);
             GdbMi result;
-            while (from != to) {
+            while (!parser.isAtEnd()) {
                 GdbMi data;
-                if (*from != ',') {
+                if (!parser.isCurrent(',')) {
                     // happens on archer where we get
                     // 23^running <NL> *running,thread-id="all" <NL> (gdb)
                     result.m_type = GdbMi::Tuple;
                     break;
                 }
-                ++from; // skip ','
-                data.parseResultOrValue(from, to);
+                parser.advance(); // skip ','
+                data.parseResultOrValue(parser);
                 if (data.isValid()) {
                     //qDebug() << "parsed result:" << data.toString();
                     result.addChild(data);
@@ -309,7 +291,7 @@ void GdbEngine::handleResponse(const QString &buff)
         }
 
         case '~': {
-            QString data = GdbMi::parseCString(from, to);
+            QString data = parser.readCString();
             if (data.startsWith("bridgemessage={")) {
                 // It's already logged.
                 break;
@@ -374,14 +356,14 @@ void GdbEngine::handleResponse(const QString &buff)
         }
 
         case '@': {
-            QString data = GdbMi::parseCString(from, to);
+            QString data = parser.readCString();
             QString msg = data.left(data.size() - 1);
             showMessage(msg, AppOutput);
             break;
         }
 
         case '&': {
-            QString data = GdbMi::parseCString(from, to);
+            QString data = parser.readCString();
             // On Windows, the contents seem to depend on the debugger
             // version and/or OS version used.
             if (data.startsWith("warning:"))
@@ -402,11 +384,8 @@ void GdbEngine::handleResponse(const QString &buff)
 
             response.token = token;
 
-            for (inner = from; inner != to; ++inner)
-                if (*inner < 'a' || *inner > 'z')
-                    break;
+            QString resultClass = parser.readString(isNameChar);
 
-            QString resultClass = QString::fromRawData(from, inner - from);
             if (resultClass == "done")
                 response.resultClass = ResultDone;
             else if (resultClass == "running")
@@ -420,11 +399,10 @@ void GdbEngine::handleResponse(const QString &buff)
             else
                 response.resultClass = ResultUnknown;
 
-            from = inner;
-            if (from != to) {
-                if (*from == ',') {
-                    ++from;
-                    response.data.parseTuple_helper(from, to);
+            if (!parser.isAtEnd()) {
+                if (parser.isCurrent(',')) {
+                    parser.advance();
+                    response.data.parseTuple_helper(parser);
                     response.data.m_type = GdbMi::Tuple;
                     response.data.m_name = "data";
                 } else {
@@ -446,7 +424,8 @@ void GdbEngine::handleResponse(const QString &buff)
             break;
         }
         default: {
-            qDebug() << "UNKNOWN RESPONSE TYPE '" << c << "'. REST: " << from;
+            qDebug() << "UNKNOWN RESPONSE TYPE '" << parser.current() << "'. BUFFER: "
+                     << parser.buffer();
             break;
         }
     }
@@ -1155,8 +1134,9 @@ void GdbEngine::handleStopResponse(const GdbMi &data)
         //               qDebug() << state());
         QString msg;
         if (reason == "exited") {
-            msg = tr("Application exited with exit code %1")
-                .arg(data["exit-code"].toString());
+            const int exitCode = data["exit-code"].toInt();
+            notifyExitCode(exitCode);
+            msg = tr("Application exited with exit code %1").arg(exitCode);
         } else if (reason == "exited-signalled" || reason == "signal-received") {
             msg = tr("Application exited after receiving signal %1")
                 .arg(data["signal-name"].toString());
@@ -1166,25 +1146,6 @@ void GdbEngine::handleStopResponse(const GdbMi &data)
         // Only show the message. Ramp-down will be triggered by -thread-group-exited.
         showStatusMessage(msg);
         return;
-    }
-
-    // Ignore signals from the process stub.
-    const GdbMi frame = data["frame"];
-    if (terminal()
-            && data["reason"].data() == "signal-received"
-            && data["signal-name"].data() == "SIGSTOP")
-    {
-        const QString from = frame["from"].data();
-        const QString func = frame["func"].data();
-        if (from.endsWith("/ld-linux.so.2")
-                || from.endsWith("/ld-linux-x86-64.so.2")
-                || func == "clone")
-        {
-            showMessage("INTERNAL CONTINUE AFTER SIGSTOP FROM STUB", LogMisc);
-            notifyInferiorSpontaneousStop();
-            continueInferiorInternal();
-            return;
-        }
     }
 
     if (!m_onStop.isEmpty()) {
@@ -1204,6 +1165,7 @@ void GdbEngine::handleStopResponse(const GdbMi &data)
     QString fullName;
     QString function;
     QString language;
+    const GdbMi frame = data["frame"];
     if (frame.isValid()) {
         const GdbMi lineNumberG = frame["line"];
         function = frame["function"].data(); // V4 protocol
@@ -1751,6 +1713,8 @@ void GdbEngine::handleThreadGroupExited(const GdbMi &result)
 {
     QString groupId = result["id"].data();
     if (threadsHandler()->notifyGroupExited(groupId)) {
+        const int exitCode = result["exit-code"].toInt();
+        notifyExitCode(exitCode);
         if (m_rerunPending)
             m_rerunPending = false;
         else
@@ -3873,11 +3837,20 @@ void GdbEngine::setupEngine()
     if (!boolSetting(LoadGdbInit))
         gdbCommand.addArg("-n");
 
+    Environment gdbEnv = rp.debugger.environment;
+    if (rp.runAsRoot) {
+        CommandLine wrapped("sudo", {"-A"});
+        wrapped.addArgs(gdbCommand);
+        gdbCommand = wrapped;
+        RunControl::provideAskPassEntry(gdbEnv);
+    }
+
     showMessage("STARTING " + gdbCommand.toUserOutput());
+
     m_gdbProc.setCommand(gdbCommand);
     if (QFileInfo(rp.debugger.workingDirectory).isDir())
         m_gdbProc.setWorkingDirectory(rp.debugger.workingDirectory);
-    m_gdbProc.setEnvironment(rp.debugger.environment);
+    m_gdbProc.setEnvironment(gdbEnv);
     m_gdbProc.start();
 
     if (!m_gdbProc.waitForStarted()) {
@@ -4276,7 +4249,15 @@ void GdbEngine::interruptLocalInferior(qint64 pid)
         return;
     }
     QString errorMessage;
-    if (interruptProcess(pid, GdbEngineType, &errorMessage)) {
+    if (runParameters().runAsRoot) {
+        Environment env = Environment::systemEnvironment();
+        RunControl::provideAskPassEntry(env);
+        QtcProcess proc;
+        proc.setCommand(CommandLine{"sudo", {"-A", "kill", "-s", "SIGINT", QString::number(pid)}});
+        proc.setEnvironment(env);
+        proc.start();
+        proc.waitForFinished();
+    } else if (interruptProcess(pid, GdbEngineType, &errorMessage)) {
         showMessage("Interrupted " + QString::number(pid));
     } else {
         showMessage(errorMessage, LogError);
@@ -4642,10 +4623,13 @@ void GdbEngine::interruptInferior2()
             }
         }
 
-    } else if (isTermEngine() || isPlainEngine()) {
+    } else if (isPlainEngine()) {
 
         interruptLocalInferior(inferiorPid());
 
+    } else if (isTermEngine()) {
+
+        terminal()->interruptProcess();
     }
 }
 
@@ -4919,7 +4903,9 @@ void GdbEngine::handleStubAttached(const DebuggerResponse &response, qint64 main
             notifyEngineRunAndInferiorStopOk();
             continueInferiorInternal();
         } else {
-            showMessage("INFERIOR ATTACHED AND RUNNING");
+            showMessage("INFERIOR ATTACHED");
+            QTC_ASSERT(terminal(), return);
+            terminal()->kickoffProcess();
             //notifyEngineRunAndInferiorRunOk();
             // Wait for the upcoming *stopped and handle it there.
         }

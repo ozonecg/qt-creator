@@ -162,7 +162,6 @@ extend_qtc_plugin(Core
 
 extend_qtc_plugin(Core
   CONDITION WITH_TESTS
-  DEFINES SRCDIR="${CMAKE_CURRENT_SOURCE_DIR}/locator"
   SOURCES
     locator/locator_test.cpp
     locator/locatorfiltertest.cpp locator/locatorfiltertest.h
@@ -186,16 +185,10 @@ extend_qtc_plugin(Core
   SOURCES progressmanager/progressmanager_x11.cpp
 )
 
-if (CRASHPAD_BACKEND_URL
-  AND CRASHPAD_SRC
-  AND EXISTS "${CRASHPAD_SRC}"
-  AND CRASHPAD_BUILD
-  AND EXISTS "${CRASHPAD_BUILD}"
-  AND (WIN32 OR APPLE)) # LINUX isn't supported for now
-    extend_qtc_plugin(Core
-      DEFINES ENABLE_CRASHPAD
-    )
-endif()
+extend_qtc_plugin(Core
+  CONDITION BUILD_WITH_CRASHPAD
+  DEFINES ENABLE_CRASHPAD
+)
 
 if ((NOT WIN32) AND (NOT APPLE))
   # install logo
@@ -206,3 +199,6 @@ if ((NOT WIN32) AND (NOT APPLE))
     )
   endforeach()
 endif()
+
+# transitional qmake plugin build support
+qtc_add_public_header(coreplugin_dependencies.pri)

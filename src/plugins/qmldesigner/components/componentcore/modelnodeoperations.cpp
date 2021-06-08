@@ -633,7 +633,7 @@ void addSignalHandlerOrGotoImplementation(const SelectionContext &selectionState
 
     if (!qmlObjectNode.isValid()) {
         QString title = QCoreApplication::translate("ModelNodeOperations", "Go to Implementation");
-        QString description = QCoreApplication::translate("ModelNodeOperations", "Invalid item.");
+        QString description = QCoreApplication::translate("ModelNodeOperations", "Invalid component.");
         Core::AsynchronousMessageBox::warning(title, description);
         return;
     }
@@ -1556,7 +1556,7 @@ void editAnnotation(const SelectionContext &selectionContext)
 {
     ModelNode selectedNode = selectionContext.currentSingleSelectedNode();
 
-    AnnotationEditor::showWidget(selectedNode);
+    ModelNodeEditorProxy::fromModelNode<AnnotationEditor>(selectedNode);
 }
 
 QVariant previewImageDataForGenericNode(const ModelNode &modelNode)
@@ -1579,6 +1579,15 @@ void openSignalDialog(const SelectionContext &selectionContext)
         return;
 
     SignalList::showWidget(selectionContext.currentSingleSelectedNode());
+}
+
+void updateImported3DAsset(const SelectionContext &selectionContext)
+{
+    if (selectionContext.view()) {
+        selectionContext.view()->emitCustomNotification(
+                    "UpdateImported3DAsset", {selectionContext.currentSingleSelectedNode()});
+
+    }
 }
 
 } // namespace ModelNodeOperations

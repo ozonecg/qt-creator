@@ -329,6 +329,8 @@ void AbstractView::variantPropertiesChanged(const QList<VariantProperty>& /*prop
 {
 }
 
+void AbstractView::bindingPropertiesAboutToBeChanged(const QList<BindingProperty> &) {}
+
 void AbstractView::bindingPropertiesChanged(const QList<BindingProperty>& /*propertyList*/, PropertyChangeFlags /*propertyChange*/)
 {
 }
@@ -694,6 +696,7 @@ void AbstractView::setEnabled(bool b)
 
 QList<ModelNode> AbstractView::allModelNodes() const
 {
+    QTC_ASSERT(model(), return {});
     return toModelNodeList(model()->d->allNodes());
 }
 

@@ -270,7 +270,7 @@ public:
             QVector<DiagnosticItem *> itemsSchedulable;
 
             // Construct refactoring operations
-            for (DiagnosticItem *diagnosticItem : fileInfo.diagnosticItems) {
+            for (DiagnosticItem *diagnosticItem : qAsConst(fileInfo.diagnosticItems)) {
                 const FixitStatus fixItStatus = diagnosticItem->fixItStatus();
 
                 const bool isScheduled = fixItStatus == FixitStatus::Scheduled;
@@ -289,7 +289,7 @@ public:
 
             // Collect replacements
             ReplacementOperations ops;
-            for (DiagnosticItem *item : itemsScheduledOrSchedulable)
+            for (DiagnosticItem *item : qAsConst(itemsScheduledOrSchedulable))
                 ops += item->fixitOperations();
 
             if (ops.empty())
@@ -311,11 +311,11 @@ public:
             model->addWatchedPath(ops.first()->fileName);
 
             // Update DiagnosticItem state
-            for (DiagnosticItem *diagnosticItem : itemsScheduled)
+            for (DiagnosticItem *diagnosticItem : qAsConst(itemsScheduled))
                 diagnosticItem->setFixItStatus(FixitStatus::Applied);
-            for (DiagnosticItem *diagnosticItem : itemsFailedToApply)
+            for (DiagnosticItem *diagnosticItem : qAsConst(itemsFailedToApply))
                 diagnosticItem->setFixItStatus(FixitStatus::FailedToApply);
-            for (DiagnosticItem *diagnosticItem : itemsInvalidated)
+            for (DiagnosticItem *diagnosticItem : qAsConst(itemsInvalidated))
                 diagnosticItem->setFixItStatus(FixitStatus::Invalidated);
         }
     }
@@ -333,7 +333,7 @@ static FileInfos sortedFileInfos(const QVector<CppTools::ProjectPart::Ptr> &proj
         if (!projectPart->selectedForBuilding)
             continue;
 
-        for (const CppTools::ProjectFile &file : projectPart->files) {
+        for (const CppTools::ProjectFile &file : qAsConst(projectPart->files)) {
             QTC_ASSERT(file.kind != CppTools::ProjectFile::Unclassified, continue);
             QTC_ASSERT(file.kind != CppTools::ProjectFile::Unsupported, continue);
             if (file.path == CppTools::CppModelManager::configurationFileName())
@@ -1155,7 +1155,7 @@ void ClangTool::updateForCurrentState()
     const bool hasErrorText = !m_infoBarWidget->errorText().isEmpty();
     const bool hasErrors = m_filesFailed > 0;
     if (hasErrors && !hasErrorText) {
-        const QString text = makeLink( tr("Failed to analyze %1 files.").arg(m_filesFailed));
+        const QString text = makeLink(tr("Failed to analyze %n file(s).", nullptr, m_filesFailed));
         m_infoBarWidget->setError(InfoBarWidget::Warning, text, [this]() { showOutputPane(); });
     }
 
@@ -1171,9 +1171,8 @@ void ClangTool::updateForCurrentState()
         if (m_filesCount == 0) {
             infoText = tr("Analyzing..."); // Not yet fully started/initialized
         } else {
-            infoText = tr("Analyzing... %1 of %2 files processed.")
-                           .arg(m_filesSucceeded + m_filesFailed)
-                           .arg(m_filesCount);
+            infoText = tr("Analyzing... %1 of %n file(s) processed.", nullptr, m_filesCount)
+                           .arg(m_filesSucceeded + m_filesFailed);
         }
         break;
     case State::PreparationStarted:
@@ -1186,7 +1185,7 @@ void ClangTool::updateForCurrentState()
         infoText = tr("Analysis stopped by user.");
         break;
     case State::AnalyzerFinished:
-        infoText = tr("Finished processing %1 files.").arg(m_filesCount);
+        infoText = tr("Finished processing %n file(s).", nullptr, m_filesCount);
         break;
     case State::ImportFinished:
         infoText = tr("Diagnostics imported.");
